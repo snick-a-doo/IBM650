@@ -26,7 +26,8 @@ namespace IBM650
     constexpr std::size_t digits_per_word = 10;
 
     /// A register with N digits and a sign.
-    template<std::size_t N> class Register
+    template<std::size_t N>
+    class Register
     {
     public:
         /// Make a register initialized with zeros.
