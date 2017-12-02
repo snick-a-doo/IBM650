@@ -1,160 +1,108 @@
 #ifndef COMPUTER_HPP
 #define COMPUTER_HPP
 
-#include <array>
-
-#include "drum.hpp"
 #include "register.hpp"
 
 namespace IBM650
 {
-    class Computer
+    using TTime = int;
+
+class Computer
+{
+public:
+    Computer();
+
+    /// Advance time by the passed-in number of seconds.
+    void step(TTime seconds);
+
+    /// Apply main power with the "power on" key.
+    void power_on();
+    /// Turn off main power with the "power off" key.
+    void power_off();
+    /// Turn on DC power with the "DC on" key.  Does nothing unless DC power was automatically
+    /// turned on after startup, and then manually turned off.
+    void dc_on();
+    /// Turn off DC power with the "DC off" key.  Does nothing until DC power is automatically
+    /// turned on after startup.
+    void dc_off();
+    /// The master power switch cuts all power immediately and forever.  The 650 could be
+    /// turned back on by a technician.  Here, you can recover by creating a new instance.
+    void master_power_off();
+
+    /// @Return true when main power is on.
+    bool is_on() const;
+    /// @Return true when the cooling blower is on.  The blower is turned on when main power
+    /// applied.  It's turned off 5 minutes after main power is turned off.
+    bool is_blower_on() const;
+    /// @Return true when DC power is on and the computer is ready for operation.
+    bool is_ready() const;
+
+    /// The control switch states.
+    enum class Control
     {
-        friend class Computer_Fixture;
-
-    public:
-        Computer(bool large);
-
-        enum class Programmed
-        {
-            run,
-            stop,
-        };
-
-        enum class Half_Cycle
-        {
-            half,
-            run,
-        };
-
-        enum class Control
-        {
-            address_stop,
-            run,
-            manual,
-        };
-
-        enum class Display
-        {
-            lower_accumulator,
-            upper_accumulator,
-            distributor,
-            program_register,
-            read_out_storage,
-            read_in_storage,
-        };
-
-        enum class Overflow
-        {
-            stop,
-            sense,
-        };
-
-        enum class Error
-        {
-            stop,
-            sense,
-        };
-
-        enum class Operating_Lights
-        {
-            data_address = 0,
-            instruction_address,
-            program,
-            accumulator,
-            punch,
-            read,
-            n_lights
-        };
-        using Op_Lights = std::array<int, static_cast<int>(Operating_Lights::n_lights)>;
-
-        enum class Checking_Lights
-        {
-            program_register = 0,
-            storage_selection,
-            distributor,
-            overflow,
-            clocking,
-            accumulator,
-            error_sense,
-            n_lights
-        };
-        using Check_Lights = std::array<int, static_cast<int>(Checking_Lights::n_lights)>;
-
-        // Switches
-        void set_storage_entry(const Word& word);
-        void set_programmed(Programmed prog);
-        void set_half_cycle(Half_Cycle cycle);
-        void set_address_selection(const Address& address);
-        void set_control(Control control);
-        void set_display(Display display);
-        void set_overflom(Overflow overflow);
-        void set_error(Error error);
-
-        // Keys
-        void transfer();
-        void program_start();
-        void program_stop();
-        void program_reset();
-        void computer_reset();
-        void accumulator_reset();
-        void error_reset();
-        void error_sense_reset();
-
-        // Lights
-        /// Return the word indicated by m_display_mode when the computer is stopped.
-        /// (?) Blank when running.
-        const Word& display_lights() const;
-        const Opcode& opcode_lights() const;
-        const Address& address_lights() const;
-        const Op_Lights& operating_lights() const;
-        const Check_Lights& checking_lights() const;
-
-    private:
-        void update_display();
-
-        Drum m_drum;
-
-        Word m_distributor; // address 8001
-        Program_Register m_program_register;
-        /// The operation register.  Holds the opcode of the current operation.  Copied from
-        /// the program register.
-        Opcode m_operation;
-        /// The address register.  Holds the data address during the data half-cycle,
-        /// instruction address during the instruction half-cycle.  Copied from the program
-        /// register. 
-        Address m_address;
-        Accumulator m_accumulator; // address low: 8002, high: 8003
-
-        // Console controls
-        Word m_storage_entry; // address 8000
-        Programmed m_programmed_mode;
-        Half_Cycle m_half_cycle_mode;
-        Address m_address_selection;
-        Control m_control_mode;
-        Display m_display_mode;
-        Overflow m_overflow_mode;
-        Error m_error_mode;
-
-        // Errors
-        bool m_program_register_error;
-        bool m_accumulator_error;
-        bool m_distributor_error;
-        bool m_storage_selection_error;
-        bool m_clocking_error;
-        bool m_overflow;
-        bool m_error_sense;
-
-        Word m_display_lights;
-        /// Set to m_operation during the data half-cycle, blank during the instruction
-        /// half-cycle.  Labeled "Operation".  Named "opcode" here to avoid confusion with the
-        /// "operating" lights.
-        Opcode m_opcode_lights;
-        /// Set to m_address.
-        Address m_address_lights;
-        Op_Lights m_operating_lights;
-        Check_Lights m_checking_lights;
+        address_stop,
+        run,
+        manual,
     };
+    /// Set the control mode.
+    void set_control(Control mode);
+    /// Set the address switches.
+    void set_address(const Register<4>& address);
+
+    //! remove when not needed for testing
+    void set_distributor(const Signed_Register<10>& reg);
+    void set_accumulator(const Signed_Register<20>& reg);
+    void set_program_register(const Register<10>& reg);
+    void set_error();
+
+    /// Press the transfer key.  Sets the address register but only in manual control.
+    void transfer();
+    void program_reset();
+    void accumulator_reset();
+    void error_reset();
+    void error_sense_reset();
+
+    /// @Return the contents of the address register.
+    const Signed_Register<10>& distributor() const;
+    const Signed_Register<20>& accumulator() const;
+    const Register<10>& program_register() const;
+    const Register<2>& operation_register() const;
+    const Register<4>& address_register() const;
+
+    bool overflow() const;
+    bool distributor_validity_error() const;
+    bool accumulator_validity_error() const;
+    bool program_register_validity_error() const;
+    bool storage_selection_error() const;
+    bool clocking_error() const;
+    bool error_sense() const;
+
+private:
+    /// The number of seconds that have passed since main power was turned on or off.
+    TTime m_elapsed_seconds;
+    /// True until master power is turned off.
+    bool m_can_turn_on;
+    /// True when main power is on.
+    bool m_power_on;
+    /// True when DC power is on.
+    bool m_dc_on;
+
+    /// The state of the control switch.
+    Control m_control_mode;
+    /// The state of the address switches.
+    Register<4> m_address_entry;
+    /// The contents of the address register.
+    Signed_Register<10> m_distributor;
+    Signed_Register<20> m_accumulator;
+    Register<10> m_program_register;
+    Register<2> m_operation_register;
+    Register<4> m_address_register;
+
+    bool m_overflow;
+    bool m_storage_selection_error;
+    bool m_clocking_error;
+    bool m_error_sense;
+};
 }
 
 #endif

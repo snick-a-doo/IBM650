@@ -10,8 +10,8 @@
 top="$(CURDIR)"/
 ede_FILES=Project.ede Makefile
 
-test_SOURCES=computer.cpp register.cpp drum.cpp test_computer.cpp test_drum.cpp test_register.cpp test.cpp
-test_OBJ= computer.o register.o drum.o test_computer.o test_drum.o test_register.o test.o
+test_SOURCES=computer.cpp register.cpp test_computer.cpp test.cpp
+test_OBJ= computer.o register.o test_computer.o test.o
 CXX= g++
 CXX_COMPILE=$(CXX) $(DEFS) $(INCLUDES) $(CPPFLAGS) $(CFLAGS)
 CXX_DEPENDENCIES=-Wp,-MD,.deps/$(*F).P

@@ -1,18 +1,19 @@
 #include "register.hpp"
 
+#include <algorithm>
+
 using namespace IBM650;
 
-Opcode Program_Register::opcode() const
+char IBM650::bin(char number)
 {
-    return get_range(0, Opcode());
+    return bi_quinary_code[number == '-' ? 8
+                           : number == '+' ? 9
+                           : number];
 }
 
-Address Program_Register::data_address() const
+char IBM650::dec(char code)
 {
-    return get_range(2, Address());
-}
-
-Address Program_Register::instruction_address() const
-{
-    return get_range(6, Address());
+    char number = std::find(bi_quinary_code.begin(), bi_quinary_code.end(), code)
+        - bi_quinary_code.begin();
+    return number;
 }
