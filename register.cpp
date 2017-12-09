@@ -6,9 +6,10 @@ using namespace IBM650;
 
 char IBM650::bin(char number)
 {
-    return bi_quinary_code[number == '-' ? 8
-                           : number == '+' ? 9
-                           : number];
+    return number == '_' ? 0
+        : bi_quinary_code[number == '-' ? 8
+                          : number == '+' ? 9
+                          : number];
 }
 
 char IBM650::dec(char code)

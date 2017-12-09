@@ -3,17 +3,24 @@
 
 #include <array>
 #include <algorithm>
+#include <cassert>
 #include <iostream>
+#include <limits>
 
 namespace IBM650
 {
     /// An array of ASCII characters that have the bi-quinary bit patterns for 0, 1, ..., 9.
     constexpr std::array<char, 10> bi_quinary_code {'!','\"','$','(','0','A','B','D','H','P'};
 
-    /// @Return the bi-quinary code for a given integer.
+    /// @Return the bi-quinary code for a given integer.  If number is '_' return 0 (no bits).
+    /// Since, signs are encoded as digits, return 8 for '-', 9 for '+'.
     char bin(char number);
     /// @Return the integer for a given bi-quinary code.
     char dec(char code);
+
+    /// The type for the numeric value of a register.  Must be large enough to avoid overflow
+    /// in all cases of interest.
+    using TValue = int;
 
     template <std::size_t N> class Register
     {
@@ -24,6 +31,8 @@ namespace IBM650
         /// array.
         Register(const std::array<char, N>& digits);
 
+        template<std::size_t M>
+        Register<N>& load(const Register<M>& in, size_t in_offset, size_t reg_offset);
         /// Set all digits to the passed-in integer.
         virtual void fill(char digit);
         /// Unset all bits.
@@ -35,8 +44,8 @@ namespace IBM650
         bool is_valid() const;
 
         /// @Return the integer value of the decimal number represented by the digits in the
-        /// register.  May overflow.
-        int value() const;
+        /// register.
+        TValue value() const;
 
         /// Give access to the binary register contents.
         const std::array<char, N>& digits() const;
@@ -62,6 +71,19 @@ namespace IBM650
     {
         for (std::size_t i = 0; i < N; ++i)
             m_digits[i] = bin(digits[i]);
+    }
+
+    template<std::size_t N>
+    template<std::size_t M>
+    Register<N>& Register<N>::load(const Register<M>& in, size_t in_offset, size_t reg_offset)
+    {
+        assert(in_offset < M);
+        assert(reg_offset < N);
+        size_t length = std::min(M - in_offset, N - reg_offset);
+        std::copy(in.digits().begin() + in_offset,
+                  in.digits().begin() + in_offset + length,
+                  m_digits.begin() + reg_offset);
+        return *this;
     }
 
     template <std::size_t N>
@@ -102,8 +124,11 @@ namespace IBM650
     }
 
     template <std::size_t N>
-    int Register<N>::value() const
+    TValue Register<N>::value() const
     {
+        // Fail if the return type does not have enough bits hold the register's maximum
+        // value.
+        static_assert(N < std::numeric_limits<TValue>::digits10);
         int total = 0;
         for (auto digit : m_digits)
             total = 10*total + dec(digit);
@@ -140,11 +165,14 @@ namespace IBM650
     {
     public:
         Signed_Register()
-            : Register<N+1>()
             {}
         Signed_Register(const std::array<char, N+1>& digits)
             : Register<N+1>(digits)
             {}
+        Signed_Register(const Register<N>& reg)
+            {
+                Register<N+1>::load(reg, 0, 0);
+            }
 
         virtual void fill(char digit) override;
     };

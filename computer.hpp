@@ -7,6 +7,9 @@ namespace IBM650
 {
     using TTime = int;
 
+    using Address = Register<4>;
+    using Word = Signed_Register<10>;
+
 class Computer
 {
 public:
@@ -37,37 +40,63 @@ public:
     /// @Return true when DC power is on and the computer is ready for operation.
     bool is_ready() const;
 
-    /// The control switch states.
-    enum class Control
+    enum class Half_Cycle_Mode
+    {
+        half,
+        run,
+    };
+    enum class Control_Mode
     {
         address_stop,
         run,
         manual,
     };
-    /// Set the control mode.
-    void set_control(Control mode);
+    enum class Display_Mode
+    {
+        lower_accumulator,
+        upper_accumulator,
+        distributor,
+        program_register,
+        read_in_storage,
+        read_out_storage,
+    };
+
+    /// Set the storage-entry switches.
+    void set_storage_entry(const Word& word);
+    /// Set the half-cycle switch.
+    void set_half_cycle(Half_Cycle_Mode mode);
+    /// Set the control switch.
+    void set_control(Control_Mode mode);
+    /// Set the display switch.
+    void set_display(Display_Mode mode);
     /// Set the address switches.
-    void set_address(const Register<4>& address);
+    void set_address(const Address& address);
 
     //! remove when not needed for testing
-    void set_distributor(const Signed_Register<10>& reg);
     void set_accumulator(const Signed_Register<20>& reg);
-    void set_program_register(const Register<10>& reg);
+    void set_program_register(const Word& reg); //! make private
     void set_error();
 
     /// Press the transfer key.  Sets the address register but only in manual control.
     void transfer();
+    void program_start();
     void program_reset();
     void accumulator_reset();
     void error_reset();
     void error_sense_reset();
 
-    /// @Return the contents of the address register.
-    const Signed_Register<10>& distributor() const;
-    const Signed_Register<20>& accumulator() const;
-    const Register<10>& program_register() const;
+    /// @Return the states of the display lights.
+    Word display() const;
+    /// @Return the states of the operation register lights.
     const Register<2>& operation_register() const;
-    const Register<4>& address_register() const;
+    /// @Return the states of the address register lights.
+    const Address& address_register() const;
+
+    // "Operating" lights
+    bool data_address() const;
+    bool instruction_address() const;
+
+    // "Checking" lights
 
     bool overflow() const;
     bool distributor_validity_error() const;
@@ -78,6 +107,9 @@ public:
     bool error_sense() const;
 
 private:
+    void set_storage(const Address& address, const Word& word);
+    const Word& get_storage(const Address& address) const;
+
     /// The number of seconds that have passed since main power was turned on or off.
     TTime m_elapsed_seconds;
     /// True until master power is turned off.
@@ -88,20 +120,37 @@ private:
     bool m_dc_on;
 
     /// The state of the control switch.
-    Control m_control_mode;
+    Control_Mode m_control_mode;
+    Half_Cycle_Mode m_cycle_mode;
+    /// The state of the display switch.
+    Display_Mode m_display_mode;
+    /// The state of the storage entry switches.
+    Word m_storage_entry;
     /// The state of the address switches.
-    Register<4> m_address_entry;
-    /// The contents of the address register.
-    Signed_Register<10> m_distributor;
+    Address m_address_entry;
+
+    Word m_distributor;
     Signed_Register<20> m_accumulator;
     Register<10> m_program_register;
     Register<2> m_operation_register;
-    Register<4> m_address_register;
+    /// The contents of the address register.
+    Address m_address_register;
+
+    enum class Half_Cycle
+    {
+        data,
+        instruction,
+    };
+    Half_Cycle m_half_cycle;
 
     bool m_overflow;
     bool m_storage_selection_error;
     bool m_clocking_error;
     bool m_error_sense;
+
+    //!drum class?
+    constexpr static size_t m_drum_capacity = 2000;
+    std::array<Word, m_drum_capacity> m_drum;
 };
 }
 
