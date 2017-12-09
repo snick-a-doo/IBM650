@@ -28,13 +28,16 @@ namespace IBM650
         /// Make a register initialized with all bits unset.
         Register();
         /// Make a register initialized with the codes for the digits in passed-in integer
-        /// array.
+        /// array.  The character '_' may be passed to indicate a blank (all bits unset).
         Register(const std::array<char, N>& digits);
 
+        /// Set the digits of this register from another.  Digits are copied from in starting at
+        /// position in_offset into this register starting at reg_offset.  Copying stops when
+        /// either register runs out of digits.
         template<std::size_t M>
         Register<N>& load(const Register<M>& in, size_t in_offset, size_t reg_offset);
         /// Set all digits to the passed-in integer.
-        virtual void fill(char digit);
+        void fill(char digit);
         /// Unset all bits.
         void clear();
 
@@ -164,24 +167,42 @@ namespace IBM650
     class Signed_Register : public Register<N+1>
     {
     public:
-        Signed_Register()
-            {}
-        Signed_Register(const std::array<char, N+1>& digits)
-            : Register<N+1>(digits)
-            {}
-        Signed_Register(const Register<N>& reg)
-            {
-                Register<N+1>::load(reg, 0, 0);
-            }
+        /// Make a signed register initialized with all bits unset, including the sign.
+        Signed_Register();
+        /// Make a register initialized with the codes for the digits in passed-in integer
+        /// array.  The character '_' may be passed to indicate a blank (all bits unset).  The
+        /// last digit is the sign: 8 for -, 9 for +.  The characters '-' and '+' may be used.
+        Signed_Register(const std::array<char, N+1>& digits);
+        /// Make a register from the digits of an unsigned register and the passed-in sign.
+        Signed_Register(const Register<N>& reg, char sign);
 
-        virtual void fill(char digit) override;
+        /// Set the digits to the passed-in integer.  Set the sign to the passed-in sign.
+        void fill(char digit, char sign);
     };
 
     template <std::size_t N>
-    void Signed_Register<N>::fill(char digit)
+    Signed_Register<N>::Signed_Register()
+    {
+    }
+
+    template <std::size_t N>
+    Signed_Register<N>::Signed_Register(const std::array<char, N+1>& digits)
+        : Register<N+1>(digits)
+    {
+    }
+
+    template <std::size_t N>
+    Signed_Register<N>::Signed_Register(const Register<N>& reg, char sign)
+    {
+        Register<N+1>::load(reg, 0, 0);
+        Register<N+1>::digits().back() = bin(sign);
+    }
+
+    template <std::size_t N>
+    void Signed_Register<N>::fill(char digit, char sign)
     {
         Register<N+1>::fill(digit);
-        Register<N+1>::digits()[N] = bin('+');
+        Register<N+1>::digits()[N] = bin(sign);
     }
 }
 

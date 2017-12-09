@@ -139,7 +139,7 @@ struct Reset_Fixture : public Drum_Storage_Fixture
         store(Address({1,2,3,4}), Word({3,10, 3,2,3,3, 3,4,3,5, '-'}));
         computer.set_accumulator(
             Signed_Register<20>({10,1, 1,2,1,3, 1,4,1,5, 2,1, 2,2,2,3, 2,4,2,5, '+'}));
-        computer.set_program_register(Register<10>({1,2, 3,4,5,6, 7,8,9,10}));
+        computer.set_program_register(Word({1,2, 3,4,5,6, 7,8,9,10, '+'}));
         computer.set_error();
     }
 };
@@ -246,7 +246,7 @@ BOOST_AUTO_TEST_CASE(error_reset)
     BOOST_CHECK(f.computer.error_sense());
     // Still has bad address.
     BOOST_CHECK(f.computer.storage_selection_error());
-    f.computer.set_program_register(Register<10>({1,2, 1,2,3,4, 2,4,6,8}));
+    f.computer.set_program_register(Word({1,2, 1,2,3,4, 2,4,6,8, '-'}));
     BOOST_CHECK(!f.computer.storage_selection_error());
     BOOST_CHECK(!f.computer.clocking_error());
 }

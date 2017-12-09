@@ -20,6 +20,7 @@ Computer::Computer()
       m_dc_on(false),
       m_control_mode(Control_Mode::run), //!TODO make persistent
       m_cycle_mode(Half_Cycle_Mode::run), //!TODO make persistent
+      m_display_mode(Display_Mode::distributor),
       m_half_cycle(Half_Cycle::instruction),
       m_overflow(false),
       m_storage_selection_error(false),
@@ -139,6 +140,7 @@ void Computer::set_accumulator(const Signed_Register<20>& reg)
 void Computer::set_program_register(const Word& reg)
 {
     m_program_register.load(reg, 0, 0);
+    // Copy the operation and address to those registers.
     m_operation_register.load(reg, 0, 0);
     m_address_register.load(reg, 2, 0);
 }
@@ -173,7 +175,9 @@ void Computer::program_start()
         m_distributor = get_storage(m_address_entry);
         break;
     default:
-        if (m_half_cycle == Half_Cycle::data)
+        switch (m_half_cycle)
+        {
+        case Half_Cycle::data:
         {
             //! perform operation
             const Word& word = get_storage(m_address_register);
@@ -181,11 +185,17 @@ void Computer::program_start()
             m_operation_register.clear();
             m_address_register.clear();
             m_half_cycle = Half_Cycle::instruction;
+            break;
         }
-        else
+        case Half_Cycle::instruction:
         {
             set_program_register(m_storage_entry);
             m_half_cycle = Half_Cycle::data;
+            break;
+        }
+        default:
+            assert(false);
+            break;
         }
         break;
     }
@@ -206,8 +216,8 @@ void Computer::program_reset()
 
 void Computer::accumulator_reset()
 {
-    m_distributor.fill(0);
-    m_accumulator.fill(0);
+    m_distributor.fill(0, '+');
+    m_accumulator.fill(0, '+');
     m_overflow = false;
     m_storage_selection_error = false;
     m_clocking_error = false;
@@ -242,7 +252,7 @@ Word Computer::display() const
         return upper;
     }
     case Display_Mode::program_register:
-        return Word(m_program_register);
+        return Word(m_program_register, '_');
     default:
         return m_distributor;
     }
@@ -325,4 +335,3 @@ const Word& Computer::get_storage(const Address& address) const
         return m_drum[addr];
     }
 }
-

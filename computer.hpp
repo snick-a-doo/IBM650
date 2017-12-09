@@ -61,21 +61,29 @@ public:
         read_out_storage,
     };
 
-    /// Set the storage-entry switches.
+    // Console Switches
+
+    /// Set the storage-entry switches.  10 digit selectors and 1 sign selector for the word at
+    /// address 8000.
     void set_storage_entry(const Word& word);
-    /// Set the half-cycle switch.
+    /// Set the half-cycle switch.  2-position selector for continuous or stepped running.
     void set_half_cycle(Half_Cycle_Mode mode);
-    /// Set the control switch.
+    /// Set the control switch.  3-position selector for selecting how to proceed when the
+    /// "program start" key is pressed.
     void set_control(Control_Mode mode);
-    /// Set the display switch.
+    /// Set the display switch.  6-position switch for choosing the word displayed on the
+    /// console.
     void set_display(Display_Mode mode);
-    /// Set the address switches.
+    /// Set the address switches.  4 digit selectors for the address used for manual operation.
+    /// It's also the stop address in the "address stop" control mode.
     void set_address(const Address& address);
 
     //! remove when not needed for testing
     void set_accumulator(const Signed_Register<20>& reg);
     void set_program_register(const Word& reg); //! make private
     void set_error();
+
+    // Console Keys
 
     /// Press the transfer key.  Sets the address register but only in manual control.
     void transfer();
@@ -85,29 +93,44 @@ public:
     void error_reset();
     void error_sense_reset();
 
-    /// @Return the states of the display lights.
+    // Register Lights
+
+    /// @Return the states of the display lights.  May be blank.
     Word display() const;
-    /// @Return the states of the operation register lights.
+    /// @Return the states of the operation register lights.  May be blank.
     const Register<2>& operation_register() const;
-    /// @Return the states of the address register lights.
+    /// @Return the states of the address register lights.  May be blank.
     const Address& address_register() const;
 
-    // "Operating" lights
+    // "Operating" Lights
+
+    /// True if the data address is displayed in the address lights.  Both data_address and
+    /// instruction_address return false if no address is displayed.
     bool data_address() const;
+    /// True if the instruction address is displayed in the address lights.
     bool instruction_address() const;
 
-    // "Checking" lights
+    // "Checking" Lights
 
+    /// True if an operation overflowed the accumulator.
     bool overflow() const;
+    /// True if a non-digit was detected in the distributor.
     bool distributor_validity_error() const;
+    /// True if a non-digit was detected in the accumulator.
     bool accumulator_validity_error() const;
+    /// True if a non-digit was detected in the program register.
     bool program_register_validity_error() const;
+    /// True if there was a problem with an address.
     bool storage_selection_error() const;
+    /// True if there was a timing problem.
     bool clocking_error() const;
+    /// True if an error cause the program to stop.
     bool error_sense() const;
 
 private:
+    /// Write a word to a storage address.
     void set_storage(const Address& address, const Word& word);
+    /// @Return the word in the passed-in address.
     const Word& get_storage(const Address& address) const;
 
     /// The number of seconds that have passed since main power was turned on or off.
@@ -121,6 +144,7 @@ private:
 
     /// The state of the control switch.
     Control_Mode m_control_mode;
+    /// The state of the half-cycle switch.
     Half_Cycle_Mode m_cycle_mode;
     /// The state of the display switch.
     Display_Mode m_display_mode;
@@ -129,11 +153,12 @@ private:
     /// The state of the address switches.
     Address m_address_entry;
 
+    // Registers
+
     Word m_distributor;
     Signed_Register<20> m_accumulator;
     Register<10> m_program_register;
     Register<2> m_operation_register;
-    /// The contents of the address register.
     Address m_address_register;
 
     enum class Half_Cycle
@@ -142,6 +167,8 @@ private:
         instruction,
     };
     Half_Cycle m_half_cycle;
+
+    // Error flags
 
     bool m_overflow;
     bool m_storage_selection_error;
