@@ -10,6 +10,9 @@ namespace
     const TTime dc_on_delay_seconds = 180;
     /// The blower stays on 5 minutes after main power is turned off.
     const TTime blower_off_delay_seconds = 300;
+
+    const Address storage_entry_address({8,0,0,0});
+    //! other 800x addresses.
 }
 
 /// The initial state is: powered off for long enough that the blower is off.
@@ -22,6 +25,7 @@ Computer::Computer()
       m_cycle_mode(Half_Cycle_Mode::run), //!TODO make persistent
       m_display_mode(Display_Mode::distributor),
       m_half_cycle(Half_Cycle::instruction),
+      m_running(false),
       m_overflow(false),
       m_storage_selection_error(false),
       m_clocking_error(false),
@@ -103,6 +107,11 @@ void Computer::set_storage_entry(const Word& word)
     m_storage_entry = word;
 }
 
+void Computer::set_programmed(Programmed_Mode mode)
+{
+    m_programmed_mode = mode;
+}
+
 void Computer::set_half_cycle(Half_Cycle_Mode mode)
 {
     m_cycle_mode = mode;
@@ -162,42 +171,98 @@ void Computer::transfer()
 
 void Computer::program_start()
 {
-    m_distributor = m_storage_entry;
-
-    // It's odd that what happens on program start depends on the display mode, but that
-    // appears to be the case.
-    switch (m_display_mode)
+    if (m_control_mode == Control_Mode::manual)
     {
-    case Display_Mode::read_in_storage:
-        set_storage(m_address_entry, m_distributor);
-        break;
-    case Display_Mode::read_out_storage:
-        m_distributor = get_storage(m_address_entry);
-        break;
-    default:
-        switch (m_half_cycle)
+        m_distributor = m_storage_entry;
+
+        // It's odd that what happens on program start depends on the display mode, but that
+        // appears to be the case.
+        switch (m_display_mode)
         {
-        case Half_Cycle::data:
-        {
-            //! perform operation
-            const Word& word = get_storage(m_address_register);
-            m_accumulator.load(word, 0, 10);
-            m_operation_register.clear();
-            m_address_register.clear();
-            m_half_cycle = Half_Cycle::instruction;
+        case Display_Mode::read_in_storage:
+            set_storage(m_address_entry, m_distributor);
+            break;
+        case Display_Mode::read_out_storage:
+            m_distributor = get_storage(m_address_entry);
+            break;
+        default:
+            // I don't know what happens if you start in manual mode with other display
+            // settings.  Let's assume it just sets the distributor.
             break;
         }
+        return;
+    }
+
+    m_program_register.load(m_storage_entry, 0, 0);
+    m_running = true;
+    while (m_running)
+    {
+        m_running = m_cycle_mode == Half_Cycle_Mode::run;
+        switch (m_half_cycle)
+        {
         case Half_Cycle::instruction:
         {
-            set_program_register(m_storage_entry);
+            // D half-cycle
             m_half_cycle = Half_Cycle::data;
+            m_operation_register.load(m_program_register, 0, 0);
+            m_address_register.load(m_program_register, 2, 0);
+            m_operation = Operation(m_operation_register.value());
+            break;
+        }
+        case Half_Cycle::data:
+        {
+            //! if operation operates on storage.
+            //! until at read head.
+            m_distributor.load(get_storage(m_address_register), 0, 0);
+
+            // I half-cycle
+            m_half_cycle = Half_Cycle::instruction;
+            m_operation_register.clear();
+            m_address_register.load(m_program_register, 6, 0);
+            bool done = false;
+            while (!done)
+            {
+                done = execute();
+                if (!m_running)
+                    return;
+                // Get the next instruction during execution if possible.
+                //! if at read head
+                m_program_register.load(get_storage(m_address_register), 0, 0);
+            }
+            //! if we didn't get the instruction during execution, stay here until we do.
             break;
         }
         default:
             assert(false);
             break;
         }
-        break;
+    }
+}
+
+bool Computer::execute()
+{
+    switch (m_operation)
+    {
+    case Operation::no_operation:
+        return true;
+    case Operation::stop:
+        m_running = m_programmed_mode == Programmed_Mode::run;
+        return true;
+    case Operation::add_to_upper:
+    {
+        Signed_Register<20> rhs;
+        rhs.load(m_distributor, 0, 10);
+        char carry;
+        m_accumulator = add(m_accumulator, shift(rhs, 10), carry);
+        //! set overflow
+        return true;
+    }
+    case Operation::reset_add_lower:
+        m_accumulator.load(m_distributor, 0, 10);
+        return true;
+    default:
+        assert(false);
+        return false;
     }
 }
 
@@ -212,6 +277,15 @@ void Computer::program_reset()
 
     m_storage_selection_error = false;
     m_clocking_error = false;
+}
+
+void Computer::computer_reset()
+{
+    program_reset();
+    accumulator_reset();
+    error_sense_reset();
+    if (m_control_mode != Control_Mode::manual)
+        m_address_register = storage_entry_address;
 }
 
 void Computer::accumulator_reset()
@@ -303,7 +377,8 @@ bool Computer::storage_selection_error() const
     if (m_address_register.is_blank())
         return false;
     int address = m_address_register.value();
-    return (address > 1999 && (address < 8000 || address > 8003)) || m_storage_selection_error;
+    return (address > 1999 && (address < storage_entry_address.value() || address > 8003))
+        || m_storage_selection_error;
 }
 
 bool Computer::clocking_error() const
@@ -325,13 +400,12 @@ void Computer::set_storage(const Address& address, const Word& word)
 
 const Word& Computer::get_storage(const Address& address) const
 {
-    const TValue addr = address.value();
-    switch (addr)
-    {
-    case 8000:
+    if (address == storage_entry_address)
         return m_storage_entry;
-    default:
-        //!need to wait for location to pass read head.
-        return m_drum[addr];
-    }
+
+    //! other 800x addresses
+
+    //!need to wait for location to pass read head.
+    assert(address.value() < m_drum.size());
+    return m_drum[address.value()];
 }

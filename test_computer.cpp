@@ -259,6 +259,44 @@ BOOST_AUTO_TEST_CASE(error_sense_reset)
     BOOST_CHECK(!f.computer.error_sense());
 }
 
+BOOST_AUTO_TEST_CASE(computer_reset_manual)
+{
+    Reset_Fixture f;
+    f.computer.set_control(Computer::Control_Mode::manual);
+    f.computer.computer_reset();
+    BOOST_CHECK(!f.computer.program_register_validity_error());
+    BOOST_CHECK(!f.computer.storage_selection_error());
+    BOOST_CHECK(!f.computer.clocking_error());
+    BOOST_CHECK(!f.computer.error_sense());
+    f.computer.set_display(Computer::Display_Mode::program_register);
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+    f.computer.set_display(Computer::Display_Mode::lower_accumulator);
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+    f.computer.set_display(Computer::Display_Mode::upper_accumulator);
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+    f.computer.set_display(Computer::Display_Mode::distributor);
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
+    BOOST_CHECK_EQUAL(f.computer.address_register(), Address());
+}
+
+BOOST_AUTO_TEST_CASE(computer_reset_run)
+{
+    Reset_Fixture f;
+    f.computer.set_control(Computer::Control_Mode::run);
+    f.computer.computer_reset();
+    f.computer.set_display(Computer::Display_Mode::program_register);
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+    f.computer.set_display(Computer::Display_Mode::lower_accumulator);
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+    f.computer.set_display(Computer::Display_Mode::upper_accumulator);
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+    f.computer.set_display(Computer::Display_Mode::distributor);
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
+    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({8,0,0,0}));
+}
+
 BOOST_AUTO_TEST_CASE(storage_entry)
 {
     Word word({1,2, 1,2,3,4, 2,4,6,8, '-'});
@@ -316,14 +354,14 @@ BOOST_AUTO_TEST_CASE(accumulator_entry)
     BOOST_CHECK(!f.computer.instruction_address());
     f.computer.program_start();
     BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address());
+    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({0,0,0,0}));
     f.computer.set_display(Computer::Display_Mode::lower_accumulator);
     BOOST_CHECK_EQUAL(f.computer.display(), word);
 }
 
 BOOST_AUTO_TEST_CASE(accumulator_entry_2)
 {
-    Word word({1,2, 1,2,3,4, 2,4,6,8, '-'});
+    Word word({1,2, 2,4,6,8, 1,2,3,4, '-'});
 
     Computer_Ready_Fixture f;
     f.computer.set_display(Computer::Display_Mode::distributor);
@@ -340,4 +378,38 @@ BOOST_AUTO_TEST_CASE(accumulator_entry_2)
 
     f.computer.set_display(Computer::Display_Mode::lower_accumulator);
     BOOST_CHECK_EQUAL(f.computer.display(), word);
+}
+
+BOOST_AUTO_TEST_CASE(start_program)
+{
+    // Add to upper
+    Word instr1({1,0, 1,1,0,0, 0,1,0,1, '+'});
+    Address addr1({0,1,0,0});
+    // Add to upper
+    Word instr2({1,0, 1,1,0,0, 0,1,0,8, '+'});
+    Address addr2({0,1,0,1});
+    // Program stop
+    Word instr3({0,1, 0,0,0,0, 0,0,0,0, '+'});
+    Address addr3({0,1,0,8});
+    // Data
+    Word data({0,0, 0,0,0,1, 7,1,7,1, '+'});
+    Address data_addr({1,1,0,0});
+
+    // Assuming that the sign is not displayed with the upper accumulator.
+    Word data_display({0,0, 0,0,0,1, 7,1,7,1, '_'});
+
+    Drum_Storage_Fixture f;
+    f.store(addr1, instr1);
+    f.store(addr2, instr2);
+    f.store(addr3, instr3);
+    f.store(data_addr, data);
+    // Make the program stop on "program stop".
+    f.computer.set_programmed(Computer::Programmed_Mode::stop);
+    f.computer.set_control(Computer::Control_Mode::run);
+    f.computer.set_display(Computer::Display_Mode::upper_accumulator);
+    f.computer.set_storage_entry(Word({0,0, 0,0,0,0, 0,1,0,0, '+'}));
+
+    f.computer.computer_reset();
+    f.computer.program_start();
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,3, 4,3,4,2, '_'}));
 }

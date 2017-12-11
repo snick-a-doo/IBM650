@@ -9,14 +9,16 @@
 
 namespace IBM650
 {
+    using TDigit = char;
+
     /// An array of ASCII characters that have the bi-quinary bit patterns for 0, 1, ..., 9.
-    constexpr std::array<char, 10> bi_quinary_code {'!','\"','$','(','0','A','B','D','H','P'};
+    constexpr std::array<TDigit, 10> bi_quinary_code {'!','\"','$','(','0','A','B','D','H','P'};
 
     /// @Return the bi-quinary code for a given integer.  If number is '_' return 0 (no bits).
     /// Since, signs are encoded as digits, return 8 for '-', 9 for '+'.
-    char bin(char number);
+    TDigit bin(TDigit number);
     /// @Return the integer for a given bi-quinary code.
-    char dec(char code);
+    TDigit dec(TDigit code);
 
     /// The type for the numeric value of a register.  Must be large enough to avoid overflow
     /// in all cases of interest.
@@ -29,7 +31,7 @@ namespace IBM650
         Register();
         /// Make a register initialized with the codes for the digits in passed-in integer
         /// array.  The character '_' may be passed to indicate a blank (all bits unset).
-        Register(const std::array<char, N>& digits);
+        Register(const std::array<TDigit, N>& digits);
 
         /// Set the digits of this register from another.  Digits are copied from in starting at
         /// position in_offset into this register starting at reg_offset.  Copying stops when
@@ -37,7 +39,7 @@ namespace IBM650
         template<std::size_t M>
         Register<N>& load(const Register<M>& in, size_t in_offset, size_t reg_offset);
         /// Set all digits to the passed-in integer.
-        void fill(char digit);
+        void fill(TDigit digit);
         /// Unset all bits.
         void clear();
 
@@ -51,8 +53,8 @@ namespace IBM650
         TValue value() const;
 
         /// Give access to the binary register contents.
-        const std::array<char, N>& digits() const;
-        std::array<char, N>& digits();
+        const std::array<TDigit, N>& digits() const;
+        std::array<TDigit, N>& digits();
 
         /// @Return true if reg has all the same digits.
         bool operator==(const Register<N>& reg) const;
@@ -61,7 +63,7 @@ namespace IBM650
 
     private:
         /// The contents of the register as bi-quinary codes.
-        std::array<char, N> m_digits;
+        std::array<TDigit, N> m_digits;
     };
 
     template <std::size_t N>
@@ -70,7 +72,7 @@ namespace IBM650
     {}
 
     template <std::size_t N>
-    Register<N>::Register(const std::array<char, N>& digits)
+    Register<N>::Register(const std::array<TDigit, N>& digits)
     {
         for (std::size_t i = 0; i < N; ++i)
             m_digits[i] = bin(digits[i]);
@@ -90,7 +92,7 @@ namespace IBM650
     }
 
     template <std::size_t N>
-    void Register<N>::fill(char digit)
+    void Register<N>::fill(TDigit digit)
     {
         for (std::size_t i = 0; i < N; ++i)
             m_digits[i] = bin(digit);
@@ -115,7 +117,7 @@ namespace IBM650
     {
         // Bi-quinary codes have exactly one of bits 0-4 set, and one of 5-6.  No other bit
         // patterns represent a decimal digit.
-        auto one_bit_set = [](char digit, int start, int bits) {
+        auto one_bit_set = [](TDigit digit, int start, int bits) {
             int sum = 0;
             for (int i = start; i < start + bits; ++i)
                 sum += digit >> i & 1;
@@ -139,13 +141,13 @@ namespace IBM650
     }
 
     template <std::size_t N>
-    const std::array<char, N>& Register<N>::digits() const
+    const std::array<TDigit, N>& Register<N>::digits() const
     {
         return m_digits;
     }
 
     template <std::size_t N>
-    std::array<char, N>& Register<N>::digits()
+    std::array<TDigit, N>& Register<N>::digits()
     {
         return m_digits;
     }
@@ -172,12 +174,12 @@ namespace IBM650
         /// Make a register initialized with the codes for the digits in passed-in integer
         /// array.  The character '_' may be passed to indicate a blank (all bits unset).  The
         /// last digit is the sign: 8 for -, 9 for +.  The characters '-' and '+' may be used.
-        Signed_Register(const std::array<char, N+1>& digits);
+        Signed_Register(const std::array<TDigit, N+1>& digits);
         /// Make a register from the digits of an unsigned register and the passed-in sign.
-        Signed_Register(const Register<N>& reg, char sign);
+        Signed_Register(const Register<N>& reg, TDigit sign);
 
         /// Set the digits to the passed-in integer.  Set the sign to the passed-in sign.
-        void fill(char digit, char sign);
+        void fill(TDigit digit, TDigit sign);
     };
 
     template <std::size_t N>
@@ -186,23 +188,54 @@ namespace IBM650
     }
 
     template <std::size_t N>
-    Signed_Register<N>::Signed_Register(const std::array<char, N+1>& digits)
+    Signed_Register<N>::Signed_Register(const std::array<TDigit, N+1>& digits)
         : Register<N+1>(digits)
     {
     }
 
     template <std::size_t N>
-    Signed_Register<N>::Signed_Register(const Register<N>& reg, char sign)
+    Signed_Register<N>::Signed_Register(const Register<N>& reg, TDigit sign)
     {
         Register<N+1>::load(reg, 0, 0);
         Register<N+1>::digits().back() = bin(sign);
     }
 
     template <std::size_t N>
-    void Signed_Register<N>::fill(char digit, char sign)
+    void Signed_Register<N>::fill(TDigit digit, TDigit sign)
     {
         Register<N+1>::fill(digit);
         Register<N+1>::digits()[N] = bin(sign);
+    }
+
+    template <std::size_t N>
+    Signed_Register<N> shift(const Signed_Register<N>& reg, std::size_t left)
+    {
+        Signed_Register<N> out(reg);
+        for (std::size_t i = 0; i < N; ++i)
+        {
+            std::size_t j = i + left;
+            out.digits()[i] = 0 <= j && j < N ? reg.digits()[j] : bin(0);
+        }
+        return out;
+    }
+
+    template <std::size_t N>
+    Signed_Register<N> add(const Signed_Register<N>& lhs,
+                           const Signed_Register<N>& rhs,
+                           TDigit& carry)
+    {
+        //! check the signs
+        carry = 0;
+        std::array<TDigit, N+1> sum;
+        for (std::size_t i = 0; i < N; ++i)
+        {
+            std::size_t place = N - i - 1;
+            TDigit digit = carry + dec(lhs.digits()[place]) + dec(rhs.digits()[place]);
+            sum[place] = digit % 10;
+            carry = digit/10;
+        }
+        sum[N] = bin('+');
+        return Signed_Register<N>(sum);
     }
 }
 
@@ -213,7 +246,6 @@ namespace std
     {
         for (auto digit : reg.digits())
             os << digit;
-        os << std::endl;
     }
 }
 

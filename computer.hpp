@@ -40,6 +40,11 @@ public:
     /// @Return true when DC power is on and the computer is ready for operation.
     bool is_ready() const;
 
+    enum class Programmed_Mode
+    {
+        stop,
+        run,
+    };
     enum class Half_Cycle_Mode
     {
         half,
@@ -66,6 +71,7 @@ public:
     /// Set the storage-entry switches.  10 digit selectors and 1 sign selector for the word at
     /// address 8000.
     void set_storage_entry(const Word& word);
+    void set_programmed(Programmed_Mode mode);
     /// Set the half-cycle switch.  2-position selector for continuous or stepped running.
     void set_half_cycle(Half_Cycle_Mode mode);
     /// Set the control switch.  3-position selector for selecting how to proceed when the
@@ -89,6 +95,7 @@ public:
     void transfer();
     void program_start();
     void program_reset();
+    void computer_reset();
     void accumulator_reset();
     void error_reset();
     void error_sense_reset();
@@ -133,6 +140,16 @@ private:
     /// @Return the word in the passed-in address.
     const Word& get_storage(const Address& address) const;
 
+    enum class Operation
+    {
+        no_operation = 00,
+        stop = 01,
+        add_to_upper = 10,
+        reset_add_lower = 65,
+    };
+    Operation m_operation;
+    bool execute();
+
     /// The number of seconds that have passed since main power was turned on or off.
     TTime m_elapsed_seconds;
     /// True until master power is turned off.
@@ -142,6 +159,7 @@ private:
     /// True when DC power is on.
     bool m_dc_on;
 
+    Programmed_Mode m_programmed_mode;
     /// The state of the control switch.
     Control_Mode m_control_mode;
     /// The state of the half-cycle switch.
@@ -167,6 +185,7 @@ private:
         instruction,
     };
     Half_Cycle m_half_cycle;
+    bool m_running;
 
     // Error flags
 
