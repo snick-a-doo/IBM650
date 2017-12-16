@@ -25,17 +25,20 @@ Computer::Computer()
       m_cycle_mode(Half_Cycle_Mode::run), //!TODO make persistent
       m_display_mode(Display_Mode::distributor),
       m_half_cycle(Half_Cycle::instruction),
+      m_run_time(0),
+      m_restart(false),
       m_overflow(false),
       m_storage_selection_error(false),
       m_clocking_error(false),
-      m_error_sense(false)
+      m_error_sense(false),
+      m_drum_index(0)
 {
     m_operation_map[Operation::next_instruction] = {
-        std::bind(&Computer::enable_program_register, this),
-        std::bind(&Computer::search_for_instruction, this),
         std::bind(&Computer::instruction_to_program_register, this),
         std::bind(&Computer::op_and_address_to_registers, this),
-        std::bind(&Computer::instruction_address_to_address_register, this)
+        // Operation starts here.
+        std::bind(&Computer::instruction_address_to_address_register, this),
+        std::bind(&Computer::enable_program_register, this)
     };
     m_next_op_it = m_operation_map[Operation::next_instruction].begin();
 
@@ -43,25 +46,20 @@ Computer::Computer()
     m_operation_map[Operation::stop] = {};
     m_operation_map[Operation::add_to_upper] = {
         std::bind(&Computer::enable_distributor, this),
-        std::bind(&Computer::search_for_data_location, this),
         std::bind(&Computer::data_to_distributor, this),
         std::bind(&Computer::wait_for_even, this),
         std::bind(&Computer::distributor_to_accumulator, this),
-        std::bind(&Computer::compliment, this),
         std::bind(&Computer::remove_interlock_a, this),
     };
     m_operation_map[Operation::reset_and_add_to_lower] = {
         std::bind(&Computer::enable_distributor, this),
-        std::bind(&Computer::search_for_data_location, this),
         std::bind(&Computer::data_to_distributor, this),
         std::bind(&Computer::wait_for_even, this),
         std::bind(&Computer::distributor_to_accumulator, this),
-        std::bind(&Computer::compliment, this),
         std::bind(&Computer::remove_interlock_a, this),
     };
     m_operation_map[Operation::load_distributor] = {
         std::bind(&Computer::enable_distributor, this),
-        std::bind(&Computer::search_for_data_location, this),
         std::bind(&Computer::data_to_distributor, this),
     };
 }
@@ -234,10 +232,13 @@ void Computer::program_start()
             std::cerr << "I\n";
             // Load the data address.
             for (m_next_op_it = m_operation_map[Operation::next_instruction].begin();
-                 m_half_cycle == Half_Cycle::instruction;
-                 ++m_next_op_it)
-                while (!(*m_next_op_it)());
-
+                 m_half_cycle == Half_Cycle::instruction; )
+            {
+                if ((*m_next_op_it)())
+                    ++m_next_op_it;
+                ++m_run_time;
+                m_drum_index = (m_drum_index + 1) % 50;
+            }
             if (m_cycle_mode == Half_Cycle_Mode::half)
                 return;
         }
@@ -247,16 +248,36 @@ void Computer::program_start()
             m_operation = Operation(m_operation_register.value());
             std::cerr << "D: op=" << static_cast<int>(m_operation) << std::endl;
             m_operation_register.clear();
-            // Do the operation steps.
-            for (auto step : m_operation_map[m_operation])
-                while (!step());
-            // Load the address of the next instruction.
-            for ( ; m_next_op_it != m_operation_map[Operation::next_instruction].end(); ++m_next_op_it)
-                while (!(*m_next_op_it)());
+
+            bool restarted = false;
+            auto op_end = m_operation_map[m_operation].end();
+            auto inst_end = m_operation_map[Operation::next_instruction].end();
+            for (auto op_it = m_operation_map[m_operation].begin();
+                 op_it != op_end || m_next_op_it != inst_end; )
+            {
+                if (op_it != op_end)
+                    if ((*op_it)())
+                        ++op_it;
+
+                if (m_operation == Operation::stop && op_it == op_end)
+                    return;
+
+                if ((m_restart || op_it == op_end) && m_next_op_it != inst_end)
+                {
+                    // It takes a cycle to process the "restart" signal and begin parallel
+                    // execution.  So the first time through, we just set the "restarted"
+                    // flag.
+                    if (restarted || op_it == op_end)
+                        if ((*m_next_op_it)())
+                            ++m_next_op_it;
+                    restarted = true;
+                }
+
+                ++m_run_time;
+                m_drum_index = (m_drum_index + 1) % 50;
+            }
 
             if (m_cycle_mode == Half_Cycle_Mode::half)
-                return;
-            if (m_operation == Operation::stop)
                 return;
         }
     }
@@ -273,6 +294,7 @@ void Computer::program_reset()
 
     m_storage_selection_error = false;
     m_clocking_error = false;
+    m_run_time = 0;
 }
 
 void Computer::computer_reset()
@@ -387,6 +409,10 @@ bool Computer::error_sense() const
     return m_error_sense;
 }
 
+int Computer::run_time() const
+{
+    return m_run_time;
+}
 
 void Computer::set_storage(const Address& address, const Word& word)
 {
@@ -410,17 +436,24 @@ const Word& Computer::get_storage(const Address& address) const
 
 bool Computer::instruction_to_program_register()
 {
-    m_program_register.load(get_storage(m_address_register), 0, 0);
-    std::cerr << "I to PR: addr=" << m_address_register 
-              << " word=" << m_program_register << std::endl;
-    return true;
+    std::cerr << m_run_time << " I to PR: addr=" << m_address_register 
+              << " drum=" << m_drum_index << std::endl;
+
+    TValue addr = m_address_register.value();
+    if (addr >= 8000 || m_drum_index == addr % 50)
+    {
+        m_program_register.load(get_storage(m_address_register), 0, 0);
+        std::cerr << "I to PR: PR=" << m_program_register << std::endl;
+        return true;
+    }
+    return false;
 }
 
 bool Computer::op_and_address_to_registers()
 {
     m_operation_register.load(m_program_register, 0, 0);
     m_address_register.load(m_program_register, 2, 0);
-    std::cerr << "Op and DA to reg: Op=" << m_operation_register
+    std::cerr << m_run_time << " Op and DA to reg: Op=" << m_operation_register
               << " DA=" << m_address_register << std::endl;
 
     m_half_cycle = Half_Cycle::data;
@@ -430,7 +463,7 @@ bool Computer::op_and_address_to_registers()
 bool Computer::instruction_address_to_address_register()
 {
     m_address_register.load(m_program_register, 6, 0);
-    std::cerr << "IA to R: IA=" << m_address_register << std::endl;
+    std::cerr << m_run_time << " IA to R: IA=" << m_address_register << std::endl;
 
     m_half_cycle = Half_Cycle::instruction;
     return true;
@@ -438,22 +471,23 @@ bool Computer::instruction_address_to_address_register()
 
 bool Computer::enable_distributor()
 {
-    std::cerr << "enable distributor\n";
-    return true;
-}
-
-bool Computer::search_for_data_location()
-{
-    std::cerr << "search for data loc: addr=" << m_address_register << std::endl;
-    //! wait for drum location to get to read head
+    std::cerr << m_run_time << " enable distributor\n";
     return true;
 }
 
 bool Computer::data_to_distributor()
 {
-    std::cerr << "data to dist: addr=" << m_address_register << std::endl;
-    m_distributor = get_storage(m_address_register);
-    return true;
+    std::cerr << m_run_time << " data to dist: addr=" << m_address_register
+              << " drum=" << m_drum_index << std::endl;
+
+    TValue addr = m_address_register.value();
+    if (addr >= 8000 || m_drum_index == addr % 50)
+    {
+        m_distributor = get_storage(m_address_register);
+        std::cerr << "data to dist: dist=" << m_distributor << std::endl;
+        return true;
+    }
+    return false;
 }
 
 bool Computer::wait_for_even()
@@ -464,37 +498,40 @@ bool Computer::wait_for_even()
 
 bool Computer::distributor_to_accumulator()
 {
-    std::cerr << "Dist to Acc: Dist=" << m_distributor << std::endl;
+    std::cerr << m_run_time << " Dist to Acc: Dist=" << m_distributor << std::endl;
+
+    // Start looking for next instruction.
+    m_restart = true;
+
+    // It takes 2 cycles to fill the accumulator and we start on an even time.
+    if (m_run_time % 2 == 0)
+        return false;
+
+    //! compliment takes more cycles
 
     switch (m_operation)
     {
     case Operation::reset_and_add_to_lower:
         m_accumulator.load(m_distributor, 0, 10);
-        break;
+        return true;
     case Operation::add_to_upper:
     {
         Signed_Register<20> rhs;
         rhs.load(m_distributor, 0, 10);
         char carry;
         m_accumulator = add(m_accumulator, shift(rhs, 10), carry);
-        break;
+        return true;
     }
     default:
         assert(false);
-        break;
+        return true;
     }
-    return true;
-}
-
-bool Computer::compliment()
-{
-    std::cerr << "compliment\n";
-    return true;
 }
 
 bool Computer::remove_interlock_a()
 {
-    std::cerr << "remove interlock A\n";
+    std::cerr << m_run_time << " remove interlock A\n";
+    m_restart = false;
     return true;
 }
 
@@ -504,9 +541,3 @@ bool Computer::enable_program_register()
     return true;
 }
 
-bool Computer::search_for_instruction()
-{
-    std::cerr << "search for inst: addr=" << m_address_register << std::endl;
-    //! wait for drum location to get to read head
-    return true;
-}

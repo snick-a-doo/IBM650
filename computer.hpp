@@ -138,6 +138,9 @@ public:
     /// True if an error cause the program to stop.
     bool error_sense() const;
 
+    /// The number of word times since computer or program reset.
+    int run_time() const;
+
 private:
     /// Write a word to a storage address.
     void set_storage(const Address& address, const Word& word);
@@ -190,6 +193,8 @@ private:
         instruction,
     };
     Half_Cycle m_half_cycle;
+    int m_run_time;
+    bool m_restart;
 
     // Error flags
 
@@ -201,6 +206,7 @@ private:
     //!drum class?
     constexpr static size_t m_drum_capacity = 2000;
     std::array<Word, m_drum_capacity> m_drum;
+    std::size_t m_drum_index;
 
     std::vector<std::function<bool()>>::iterator m_next_op_it;
     std::map<Operation, std::vector<std::function<bool()>>> m_operation_map;
@@ -209,15 +215,12 @@ private:
     bool op_and_address_to_registers();
     bool instruction_address_to_address_register();
     bool enable_distributor();
-    bool search_for_data_location();
     bool data_to_distributor();
     bool wait_for_even();
     bool distributor_to_accumulator();
-    bool compliment();
     bool remove_interlock_a();
     bool instruction_address_to_register();
     bool enable_program_register();
-    bool search_for_instruction();
 };
 }
 

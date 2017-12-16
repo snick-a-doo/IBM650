@@ -414,9 +414,9 @@ BOOST_AUTO_TEST_CASE(start_program)
     BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,3, 4,3,4,2, '_'}));
 }
 
-struct Load_Distributor_Fixture : public Drum_Storage_Fixture
+struct LD_Fixture : public Drum_Storage_Fixture
 {
-    Load_Distributor_Fixture()
+    LD_Fixture()
         : LD({6,9, 0,1,0,0, 0,0,0,1, '+'}),
           STOP({0,1, 0,0,0,0, 0,0,0,0, '+'}),
           data({0,0, 0,1,1,2, 2,3,3,4, '-'})
@@ -438,21 +438,213 @@ struct Load_Distributor_Fixture : public Drum_Storage_Fixture
 
 BOOST_AUTO_TEST_CASE(load_distributor)
 {
-    Load_Distributor_Fixture f;
+    LD_Fixture f;
     f.computer.computer_reset();
     f.computer.program_start();
     BOOST_CHECK_EQUAL(f.computer.display(), f.data);
 }
 
-BOOST_AUTO_TEST_CASE(run_twice)
+BOOST_AUTO_TEST_CASE(run_LD_wice)
 {
     // Check that the program can be run again after reset.
-    Load_Distributor_Fixture f;
+    LD_Fixture f;
     f.computer.computer_reset();
     f.computer.program_start();
     BOOST_CHECK_EQUAL(f.computer.display(), f.data);
 
     f.computer.computer_reset();
     f.computer.program_start();
+    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+}
+
+BOOST_AUTO_TEST_CASE(LD_timing)
+{
+    LD_Fixture f;
+    f.computer.computer_reset();
+    f.computer.program_start();
+    // Drum index = 0
+    // 1 to enable PR
+    // 0 for address search (8000)
+    // 2 to fill PR, OP, DA to ADDR
+    // 0 for no-op
+    // 2 to for IA to ADDR, enable PR
+    // Drum index = 5
+    // 45 to find inst addr 0000 on drum
+    // t = 50
+    // 2 to fill PR, OP, DA to ADDR
+    // 1 to enable distributor
+    // Drum index = 3
+    // 47 to find data addr 0100 on drum.
+    // t = 100
+    // 1 to load distributor.
+    // 2 to for IA to ADDR, enable PR
+    // Drum index = 3
+    // 48 to find inst addr 0001 on drum.
+    // t = 151
+    // 2 to fill PR, OP, DA to ADDR
+    // 0 for stop
+    BOOST_CHECK_EQUAL(f.computer.run_time(), 153);
+    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+}
+
+struct Optimum_LD_Fixture : public Drum_Storage_Fixture
+{
+    Optimum_LD_Fixture()
+        : LD({6,9, 0,1,0,8, 0,0,6,1, '+'}),
+          STOP({0,1, 0,0,0,0, 0,0,0,0, '+'}),
+          data({0,0, 0,1,1,2, 2,3,3,4, '-'})
+        {
+            store(Address({0,0,0,5}), LD);
+            store(Address({0,0,6,1}), STOP);
+            store(Address({0,1,0,8}), data);
+
+            computer.set_programmed(Computer::Programmed_Mode::stop);
+            computer.set_control(Computer::Control_Mode::run);
+            computer.set_display(Computer::Display_Mode::distributor);
+            computer.set_storage_entry(Word({0,0, 0,0,0,0, 0,0,0,5, '+'}));
+        }
+
+    Word LD;
+    Word STOP;
+    Word data;
+};
+
+BOOST_AUTO_TEST_CASE(optimum_LD_timing)
+{
+    Optimum_LD_Fixture f;
+    f.computer.computer_reset();
+    f.computer.program_start();
+    // Drum index = 0
+    // 1 to enable PR
+    // 0 for address search (8000)
+    // 2 to fill PR, OP, DA to ADDR
+    // 0 for no-op
+    // 2 to for IA to ADDR, enable PR
+    // Drum index = 5
+    // 0 to find inst addr 0005 on drum
+    // t = 5
+    // 2 to fill PR, OP, DA to ADDR
+    // 1 to enable distributor
+    // Drum index = 8
+    // 0 to find data addr 0108 on drum.
+    // t = 8
+    // 1 to load distributor.
+    // 2 to for IA to ADDR, enable PR
+    // Drum index = 11
+    // 0 to find inst addr 0061 on drum.
+    // t = 11
+    // 2 to fill PR, OP, DA to ADDR
+    // 0 for stop
+    BOOST_CHECK_EQUAL(f.computer.run_time(), 13);
+    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+}
+
+struct RAL_Fixture : public Drum_Storage_Fixture
+{
+    RAL_Fixture()
+        : RAL({6,5, 0,1,0,0, 0,0,0,1, '+'}),
+          STOP({0,1, 0,0,0,0, 0,0,0,0, '+'}),
+          data({0,0, 0,1,1,2, 2,3,3,4, '-'})
+        {
+            store(Address({0,0,0,0}), RAL);
+            store(Address({0,0,0,1}), STOP);
+            store(Address({0,1,0,0}), data);
+
+            computer.set_programmed(Computer::Programmed_Mode::stop);
+            computer.set_control(Computer::Control_Mode::run);
+            computer.set_display(Computer::Display_Mode::lower_accumulator);
+            computer.set_storage_entry(Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+        }
+
+    Word RAL;
+    Word STOP;
+    Word data;
+};
+
+BOOST_AUTO_TEST_CASE(RAL_timing)
+{
+    RAL_Fixture f;
+    f.computer.computer_reset();
+    std::cerr << "start\n";
+    f.computer.program_start();
+    // Drum index = 0
+    // 1 to enable PR
+    // 0 for address search (8000)
+    // 2 to fill PR, OP, DA to ADDR
+    // 0 for no-op
+    // 2 to for IA to ADDR, enable PR
+    // Drum index = 5
+    // 45 to find inst addr 0000 on drum
+    // t = 50
+    // 2 to fill PR, OP, DA to ADDR
+    // 1 to enable distributor
+    // Drum index = 3
+    // 47 to find data addr 0100 on drum.
+    // t = 100
+    // 1 to load distributor.
+    // 1 wait for even
+    // 2 fill accumulator (restart and IA to ADDR)
+    // 1 remove interlock A (enable PR)
+    // Drum index = 4
+    // 47 to find inst addr 0001 on drum.
+    // t = 151
+    // 2 to fill PR, OP, DA to ADDR
+    // 0 for stop
+    BOOST_CHECK_EQUAL(f.computer.run_time(), 153);
+    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+}
+
+struct Optimum_RAL_Fixture : public Drum_Storage_Fixture
+{
+    Optimum_RAL_Fixture()
+        : RAL({6,5, 1,1,5,8, 0,0,1,3, '+'}),
+          STOP({0,1, 0,0,0,0, 0,0,0,0, '+'}),
+          data({0,0, 0,1,1,2, 2,3,3,4, '-'})
+        {
+            store(Address({0,0,0,5}), RAL);
+            store(Address({0,0,1,3}), STOP);
+            store(Address({1,1,5,8}), data);
+
+            computer.set_programmed(Computer::Programmed_Mode::stop);
+            computer.set_control(Computer::Control_Mode::run);
+            computer.set_display(Computer::Display_Mode::lower_accumulator);
+            computer.set_storage_entry(Word({0,0, 0,0,0,0, 0,0,0,5, '+'}));
+        }
+
+    Word RAL;
+    Word STOP;
+    Word data;
+};
+
+BOOST_AUTO_TEST_CASE(optimum_RAL_timing)
+{
+    Optimum_RAL_Fixture f;
+    f.computer.computer_reset();
+    std::cerr << "start\n";
+    f.computer.program_start();
+    // Drum index = 0
+    // 1 to enable PR
+    // 0 for address search (8000)
+    // 2 to fill PR, OP, DA to ADDR
+    // 0 for no-op
+    // 2 to for IA to ADDR, enable PR
+    // Drum index = 5
+    // 0 to find inst addr 0000 on drum
+    // t = 5
+    // 2 to fill PR, OP, DA to ADDR
+    // 1 to enable distributor
+    // Drum index = 8
+    // 0 to find data addr 1158 on drum.
+    // t = 8
+    // 1 to load distributor.
+    // 1 wait for even
+    // 2 fill accumulator (restart and IA to ADDR)
+    // 1 remove interlock A (enable PR)
+    // Drum index = 13
+    // 0 to find inst addr 0013 on drum.
+    // t = 13
+    // 2 to fill PR, OP, DA to ADDR
+    // 0 for stop
+    BOOST_CHECK_EQUAL(f.computer.run_time(), 15);
     BOOST_CHECK_EQUAL(f.computer.display(), f.data);
 }
