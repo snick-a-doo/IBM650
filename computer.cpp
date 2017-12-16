@@ -25,12 +25,54 @@ Computer::Computer()
       m_cycle_mode(Half_Cycle_Mode::run), //!TODO make persistent
       m_display_mode(Display_Mode::distributor),
       m_half_cycle(Half_Cycle::instruction),
-      m_running(false),
       m_overflow(false),
       m_storage_selection_error(false),
       m_clocking_error(false),
       m_error_sense(false)
-{}
+{
+    m_operation_map[Operation::no_operation] = {
+        std::bind(&Computer::instruction_address_to_address_register, this),
+        std::bind(&Computer::enable_program_register, this),
+        std::bind(&Computer::search_for_instruction, this)
+    };
+    m_operation_map[Operation::stop] = {
+        std::bind(&Computer::instruction_address_to_address_register, this),
+        std::bind(&Computer::enable_program_register, this),
+        std::bind(&Computer::search_for_instruction, this)
+    };
+    m_operation_map[Operation::add_to_upper] = {
+        std::bind(&Computer::enable_distributor, this),
+        std::bind(&Computer::search_for_data_location, this),
+        std::bind(&Computer::data_to_distributor, this),
+        std::bind(&Computer::wait_for_even, this),
+        std::bind(&Computer::distributor_to_accumulator, this),
+        std::bind(&Computer::compliment, this),
+        std::bind(&Computer::remove_interlock_a, this),
+        std::bind(&Computer::instruction_address_to_address_register, this),
+        std::bind(&Computer::enable_program_register, this),
+        std::bind(&Computer::search_for_instruction, this)
+    };
+    m_operation_map[Operation::reset_and_add_to_lower] = {
+        std::bind(&Computer::enable_distributor, this),
+        std::bind(&Computer::search_for_data_location, this),
+        std::bind(&Computer::data_to_distributor, this),
+        std::bind(&Computer::wait_for_even, this),
+        std::bind(&Computer::distributor_to_accumulator, this),
+        std::bind(&Computer::compliment, this),
+        std::bind(&Computer::remove_interlock_a, this),
+        std::bind(&Computer::instruction_address_to_address_register, this),
+        std::bind(&Computer::enable_program_register, this),
+        std::bind(&Computer::search_for_instruction, this)
+    };
+    m_operation_map[Operation::load_distributor] = {
+        std::bind(&Computer::enable_distributor, this),
+        std::bind(&Computer::search_for_data_location, this),
+        std::bind(&Computer::data_to_distributor, this),
+        std::bind(&Computer::instruction_address_to_address_register, this),
+        std::bind(&Computer::enable_program_register, this),
+        std::bind(&Computer::search_for_instruction, this)
+    };
+}
 
 void Computer::power_on()
 {
@@ -193,76 +235,32 @@ void Computer::program_start()
         return;
     }
 
-    m_program_register.load(m_storage_entry, 0, 0);
-    m_running = true;
-    while (m_running)
+    while (true)
     {
-        m_running = m_cycle_mode == Half_Cycle_Mode::run;
-        switch (m_half_cycle)
+        if (m_half_cycle == Half_Cycle::instruction)
         {
-        case Half_Cycle::instruction:
-        {
-            // D half-cycle
+            std::cerr << "I\n";
+            instruction_to_program_register();
+            op_and_address_to_registers();
             m_half_cycle = Half_Cycle::data;
-            m_operation_register.load(m_program_register, 0, 0);
-            m_address_register.load(m_program_register, 2, 0);
-            m_operation = Operation(m_operation_register.value());
-            break;
+            if (m_cycle_mode == Half_Cycle_Mode::half)
+                return;
         }
-        case Half_Cycle::data:
+
+        if (m_half_cycle == Half_Cycle::data)
         {
-            //! if operation operates on storage.
-            //! until at read head.
-            m_distributor.load(get_storage(m_address_register), 0, 0);
-
-            // I half-cycle
-            m_half_cycle = Half_Cycle::instruction;
+            m_operation = Operation(m_operation_register.value());
+            std::cerr << "D: op=" << static_cast<int>(m_operation) << std::endl;
             m_operation_register.clear();
-            m_address_register.load(m_program_register, 6, 0);
-            bool done = false;
-            while (!done)
-            {
-                done = execute();
-                if (!m_running)
-                    return;
-                // Get the next instruction during execution if possible.
-                //! if at read head
-                m_program_register.load(get_storage(m_address_register), 0, 0);
-            }
-            //! if we didn't get the instruction during execution, stay here until we do.
-            break;
-        }
-        default:
-            assert(false);
-            break;
-        }
-    }
-}
+            for (auto op : m_operation_map[m_operation])
+                while (!op());
 
-bool Computer::execute()
-{
-    switch (m_operation)
-    {
-    case Operation::no_operation:
-        return true;
-    case Operation::stop:
-        m_running = m_programmed_mode == Programmed_Mode::run;
-        return true;
-    case Operation::add_to_upper:
-    {
-        Signed_Register<20> rhs;
-        rhs.load(m_distributor, 0, 10);
-        char carry;
-        m_accumulator = add(m_accumulator, shift(rhs, 10), carry);
-        //! set overflow
-        return true;
-    }
-    case Operation::reset_add_lower:
-        m_accumulator.load(m_distributor, 0, 10);
-        return true;
-    default:
-        assert(false);
-        return false;
+            m_half_cycle = Half_Cycle::instruction;
+            if (m_cycle_mode == Half_Cycle_Mode::half)
+                return;
+            if (m_operation == Operation::stop)
+                return;
+        }
     }
 }
 
@@ -273,7 +271,7 @@ void Computer::program_reset()
     if (m_control_mode == Control_Mode::manual)
         m_address_register.clear();
     else
-        m_address_register = m_address_entry;
+        m_address_register = Address({8,0,0,0});
 
     m_storage_selection_error = false;
     m_clocking_error = false;
@@ -400,6 +398,8 @@ void Computer::set_storage(const Address& address, const Word& word)
 
 const Word& Computer::get_storage(const Address& address) const
 {
+    std::cerr << "get_storage " << address.value() << std::endl;
+    assert(!address.is_blank());
     if (address == storage_entry_address)
         return m_storage_entry;
 
@@ -408,4 +408,103 @@ const Word& Computer::get_storage(const Address& address) const
     //!need to wait for location to pass read head.
     assert(address.value() < m_drum.size());
     return m_drum[address.value()];
+}
+
+bool Computer::instruction_to_program_register()
+{
+    m_program_register.load(get_storage(m_address_register), 0, 0);
+    std::cerr << "I to PR: addr=" << m_address_register 
+              << " word=" << m_program_register << std::endl;
+    return true;
+}
+
+bool Computer::op_and_address_to_registers()
+{
+    m_operation_register.load(m_program_register, 0, 0);
+    m_address_register.load(m_program_register, 2, 0);
+    std::cerr << "Op and DA to reg: Op=" << m_operation_register
+              << " DA=" << m_address_register << std::endl;
+    return true;
+}
+
+bool Computer::instruction_address_to_address_register()
+{
+    m_address_register.load(m_program_register, 6, 0);
+    std::cerr << "IA to R: IA=" << m_address_register << std::endl;
+    return true;
+}
+
+bool Computer::enable_distributor()
+{
+    std::cerr << "enable distributor\n";
+    return true;
+}
+
+bool Computer::search_for_data_location()
+{
+    std::cerr << "search for data loc: addr=" << m_address_register << std::endl;
+    //! wait for drum location to get to read head
+    return true;
+}
+
+bool Computer::data_to_distributor()
+{
+    std::cerr << "data to dist: addr=" << m_address_register << std::endl;
+    m_distributor = get_storage(m_address_register);
+    return true;
+}
+
+bool Computer::wait_for_even()
+{
+    std::cerr << "wait for even\n";
+    return true;
+}
+
+bool Computer::distributor_to_accumulator()
+{
+    std::cerr << "Dist to Acc: Dist=" << m_distributor << std::endl;
+
+    switch (m_operation)
+    {
+    case Operation::reset_and_add_to_lower:
+        m_accumulator.load(m_distributor, 0, 10);
+        break;
+    case Operation::add_to_upper:
+    {
+        Signed_Register<20> rhs;
+        rhs.load(m_distributor, 0, 10);
+        char carry;
+        m_accumulator = add(m_accumulator, shift(rhs, 10), carry);
+        break;
+    }
+    default:
+        assert(false);
+        break;
+    }
+    return true;
+}
+
+bool Computer::compliment()
+{
+    std::cerr << "compliment\n";
+    return true;
+}
+
+bool Computer::remove_interlock_a()
+{
+    std::cerr << "remove interlock A\n";
+    return true;
+}
+
+bool Computer::enable_program_register()
+{
+    std::cerr << "enable PR\n";
+    return true;
+}
+
+bool Computer::search_for_instruction()
+{
+    std::cerr << "search for inst: addr=" << m_address_register << std::endl;
+    //! wait for drum location to get to read head
+    return true;
 }

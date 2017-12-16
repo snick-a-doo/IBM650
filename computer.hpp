@@ -3,6 +3,10 @@
 
 #include "register.hpp"
 
+#include <map>
+#include <functional>
+#include <vector>
+
 namespace IBM650
 {
     using TTime = int;
@@ -145,10 +149,10 @@ private:
         no_operation = 00,
         stop = 01,
         add_to_upper = 10,
-        reset_add_lower = 65,
+        reset_and_add_to_lower = 65,
+        load_distributor = 69,
     };
     Operation m_operation;
-    bool execute();
 
     /// The number of seconds that have passed since main power was turned on or off.
     TTime m_elapsed_seconds;
@@ -185,7 +189,6 @@ private:
         instruction,
     };
     Half_Cycle m_half_cycle;
-    bool m_running;
 
     // Error flags
 
@@ -197,6 +200,22 @@ private:
     //!drum class?
     constexpr static size_t m_drum_capacity = 2000;
     std::array<Word, m_drum_capacity> m_drum;
+
+    std::map<Operation, std::vector<std::function<bool()>>> m_operation_map;
+    // Operation steps
+    bool instruction_to_program_register();
+    bool op_and_address_to_registers();
+    bool instruction_address_to_address_register();
+    bool enable_distributor();
+    bool search_for_data_location();
+    bool data_to_distributor();
+    bool wait_for_even();
+    bool distributor_to_accumulator();
+    bool compliment();
+    bool remove_interlock_a();
+    bool instruction_address_to_register();
+    bool enable_program_register();
+    bool search_for_instruction();
 };
 }
 

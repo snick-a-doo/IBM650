@@ -244,8 +244,11 @@ namespace std
     template<std::size_t N>
     std::ostream& operator<<(std::ostream& os, const IBM650::Register<N>& reg)
     {
-        for (auto digit : reg.digits())
-            os << digit;
+        for (std::size_t i = 0; i < N; ++i)
+        {
+            char d = IBM650::dec(reg.digits()[i]);
+            os << static_cast<char>(d < 10 ? d + '0' : d);
+        }
     }
 }
 

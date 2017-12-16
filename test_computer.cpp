@@ -176,7 +176,7 @@ BOOST_AUTO_TEST_CASE(program_reset_run)
     f.computer.set_display(Computer::Display_Mode::program_register);
     BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
     BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({1,2,3,4}));
+    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({8,0,0,0}));
 }
 
 BOOST_AUTO_TEST_CASE(program_reset_address_stop)
@@ -190,7 +190,7 @@ BOOST_AUTO_TEST_CASE(program_reset_address_stop)
     f.computer.set_display(Computer::Display_Mode::program_register);
     BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
     BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({1,2,3,4}));
+    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({8,0,0,0}));
 }
 
 BOOST_AUTO_TEST_CASE(accumulator_reset_manual)
@@ -412,4 +412,25 @@ BOOST_AUTO_TEST_CASE(start_program)
     f.computer.computer_reset();
     f.computer.program_start();
     BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,3, 4,3,4,2, '_'}));
+}
+
+BOOST_AUTO_TEST_CASE(load_distributor)
+{
+    Word LD({6,9, 0,1,0,0, 0,0,0,1, '+'});
+    Word STOP({0,1, 0,0,0,0, 0,0,0,0, '+'});
+    Word data({0,0, 0,1,1,2, 2,3,3,4, '-'});
+
+    Drum_Storage_Fixture f;
+    f.store(Address({0,0,0,0}), LD);
+    f.store(Address({0,0,0,1}), STOP);
+    f.store(Address({0,1,0,0}), data);
+
+    f.computer.set_programmed(Computer::Programmed_Mode::stop);
+    f.computer.set_control(Computer::Control_Mode::run);
+    f.computer.set_display(Computer::Display_Mode::distributor);
+    f.computer.set_storage_entry(Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+    f.computer.computer_reset();
+    std::cerr << "start\n";
+    f.computer.program_start();
+    BOOST_CHECK_EQUAL(f.computer.display(), data);
 }

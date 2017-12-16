@@ -4,7 +4,7 @@
 
 using namespace IBM650;
 
-char IBM650::bin(char number)
+TDigit IBM650::bin(TDigit number)
 {
     return number == '_' ? 0
         : bi_quinary_code[number == '-' ? 8
@@ -12,9 +12,10 @@ char IBM650::bin(char number)
                           : number];
 }
 
-char IBM650::dec(char code)
+TDigit IBM650::dec(TDigit code)
 {
-    char number = std::find(bi_quinary_code.begin(), bi_quinary_code.end(), code)
-        - bi_quinary_code.begin();
-    return number;
+    auto it = std::find(bi_quinary_code.begin(), bi_quinary_code.end(), code);
+    return code == 0 ? '_'
+        : it == bi_quinary_code.end() ? '?'
+        : std::distance(bi_quinary_code.begin(), it);
 }
