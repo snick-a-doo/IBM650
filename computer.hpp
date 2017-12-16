@@ -151,6 +151,7 @@ private:
         add_to_upper = 10,
         reset_and_add_to_lower = 65,
         load_distributor = 69,
+        next_instruction = 100,
     };
     Operation m_operation;
 
@@ -201,6 +202,7 @@ private:
     constexpr static size_t m_drum_capacity = 2000;
     std::array<Word, m_drum_capacity> m_drum;
 
+    std::vector<std::function<bool()>>::iterator m_next_op_it;
     std::map<Operation, std::vector<std::function<bool()>>> m_operation_map;
     // Operation steps
     bool instruction_to_program_register();

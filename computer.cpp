@@ -30,16 +30,17 @@ Computer::Computer()
       m_clocking_error(false),
       m_error_sense(false)
 {
-    m_operation_map[Operation::no_operation] = {
-        std::bind(&Computer::instruction_address_to_address_register, this),
+    m_operation_map[Operation::next_instruction] = {
         std::bind(&Computer::enable_program_register, this),
-        std::bind(&Computer::search_for_instruction, this)
+        std::bind(&Computer::search_for_instruction, this),
+        std::bind(&Computer::instruction_to_program_register, this),
+        std::bind(&Computer::op_and_address_to_registers, this),
+        std::bind(&Computer::instruction_address_to_address_register, this)
     };
-    m_operation_map[Operation::stop] = {
-        std::bind(&Computer::instruction_address_to_address_register, this),
-        std::bind(&Computer::enable_program_register, this),
-        std::bind(&Computer::search_for_instruction, this)
-    };
+    m_next_op_it = m_operation_map[Operation::next_instruction].begin();
+
+    m_operation_map[Operation::no_operation] = {};
+    m_operation_map[Operation::stop] = {};
     m_operation_map[Operation::add_to_upper] = {
         std::bind(&Computer::enable_distributor, this),
         std::bind(&Computer::search_for_data_location, this),
@@ -48,9 +49,6 @@ Computer::Computer()
         std::bind(&Computer::distributor_to_accumulator, this),
         std::bind(&Computer::compliment, this),
         std::bind(&Computer::remove_interlock_a, this),
-        std::bind(&Computer::instruction_address_to_address_register, this),
-        std::bind(&Computer::enable_program_register, this),
-        std::bind(&Computer::search_for_instruction, this)
     };
     m_operation_map[Operation::reset_and_add_to_lower] = {
         std::bind(&Computer::enable_distributor, this),
@@ -60,17 +58,11 @@ Computer::Computer()
         std::bind(&Computer::distributor_to_accumulator, this),
         std::bind(&Computer::compliment, this),
         std::bind(&Computer::remove_interlock_a, this),
-        std::bind(&Computer::instruction_address_to_address_register, this),
-        std::bind(&Computer::enable_program_register, this),
-        std::bind(&Computer::search_for_instruction, this)
     };
     m_operation_map[Operation::load_distributor] = {
         std::bind(&Computer::enable_distributor, this),
         std::bind(&Computer::search_for_data_location, this),
         std::bind(&Computer::data_to_distributor, this),
-        std::bind(&Computer::instruction_address_to_address_register, this),
-        std::bind(&Computer::enable_program_register, this),
-        std::bind(&Computer::search_for_instruction, this)
     };
 }
 
@@ -240,9 +232,12 @@ void Computer::program_start()
         if (m_half_cycle == Half_Cycle::instruction)
         {
             std::cerr << "I\n";
-            instruction_to_program_register();
-            op_and_address_to_registers();
-            m_half_cycle = Half_Cycle::data;
+            // Load the data address.
+            for (m_next_op_it = m_operation_map[Operation::next_instruction].begin();
+                 m_half_cycle == Half_Cycle::instruction;
+                 ++m_next_op_it)
+                while (!(*m_next_op_it)());
+
             if (m_cycle_mode == Half_Cycle_Mode::half)
                 return;
         }
@@ -252,10 +247,13 @@ void Computer::program_start()
             m_operation = Operation(m_operation_register.value());
             std::cerr << "D: op=" << static_cast<int>(m_operation) << std::endl;
             m_operation_register.clear();
-            for (auto op : m_operation_map[m_operation])
-                while (!op());
+            // Do the operation steps.
+            for (auto step : m_operation_map[m_operation])
+                while (!step());
+            // Load the address of the next instruction.
+            for ( ; m_next_op_it != m_operation_map[Operation::next_instruction].end(); ++m_next_op_it)
+                while (!(*m_next_op_it)());
 
-            m_half_cycle = Half_Cycle::instruction;
             if (m_cycle_mode == Half_Cycle_Mode::half)
                 return;
             if (m_operation == Operation::stop)
@@ -424,6 +422,8 @@ bool Computer::op_and_address_to_registers()
     m_address_register.load(m_program_register, 2, 0);
     std::cerr << "Op and DA to reg: Op=" << m_operation_register
               << " DA=" << m_address_register << std::endl;
+
+    m_half_cycle = Half_Cycle::data;
     return true;
 }
 
@@ -431,6 +431,8 @@ bool Computer::instruction_address_to_address_register()
 {
     m_address_register.load(m_program_register, 6, 0);
     std::cerr << "IA to R: IA=" << m_address_register << std::endl;
+
+    m_half_cycle = Half_Cycle::instruction;
     return true;
 }
 

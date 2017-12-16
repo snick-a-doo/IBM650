@@ -414,23 +414,45 @@ BOOST_AUTO_TEST_CASE(start_program)
     BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,3, 4,3,4,2, '_'}));
 }
 
+struct Load_Distributor_Fixture : public Drum_Storage_Fixture
+{
+    Load_Distributor_Fixture()
+        : LD({6,9, 0,1,0,0, 0,0,0,1, '+'}),
+          STOP({0,1, 0,0,0,0, 0,0,0,0, '+'}),
+          data({0,0, 0,1,1,2, 2,3,3,4, '-'})
+        {
+            store(Address({0,0,0,0}), LD);
+            store(Address({0,0,0,1}), STOP);
+            store(Address({0,1,0,0}), data);
+
+            computer.set_programmed(Computer::Programmed_Mode::stop);
+            computer.set_control(Computer::Control_Mode::run);
+            computer.set_display(Computer::Display_Mode::distributor);
+            computer.set_storage_entry(Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+        }
+
+    Word LD;
+    Word STOP;
+    Word data;
+};
+
 BOOST_AUTO_TEST_CASE(load_distributor)
 {
-    Word LD({6,9, 0,1,0,0, 0,0,0,1, '+'});
-    Word STOP({0,1, 0,0,0,0, 0,0,0,0, '+'});
-    Word data({0,0, 0,1,1,2, 2,3,3,4, '-'});
-
-    Drum_Storage_Fixture f;
-    f.store(Address({0,0,0,0}), LD);
-    f.store(Address({0,0,0,1}), STOP);
-    f.store(Address({0,1,0,0}), data);
-
-    f.computer.set_programmed(Computer::Programmed_Mode::stop);
-    f.computer.set_control(Computer::Control_Mode::run);
-    f.computer.set_display(Computer::Display_Mode::distributor);
-    f.computer.set_storage_entry(Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+    Load_Distributor_Fixture f;
     f.computer.computer_reset();
-    std::cerr << "start\n";
     f.computer.program_start();
-    BOOST_CHECK_EQUAL(f.computer.display(), data);
+    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+}
+
+BOOST_AUTO_TEST_CASE(run_twice)
+{
+    // Check that the program can be run again after reset.
+    Load_Distributor_Fixture f;
+    f.computer.computer_reset();
+    f.computer.program_start();
+    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+
+    f.computer.computer_reset();
+    f.computer.program_start();
+    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
 }
