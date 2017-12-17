@@ -69,29 +69,44 @@ public:
         read_in_storage,
         read_out_storage,
     };
+    enum class Error_Mode
+    {
+        stop,
+        sense,
+    };
 
     // Console Switches
 
     /// Set the storage-entry switches.  10 digit selectors and 1 sign selector for the word at
     /// address 8000.
     void set_storage_entry(const Word& word);
-    void set_programmed(Programmed_Mode mode);
+    void set_programmed_mode(Programmed_Mode mode);
     /// Set the half-cycle switch.  2-position selector for continuous or stepped running.
-    void set_half_cycle(Half_Cycle_Mode mode);
+    void set_half_cycle_mode(Half_Cycle_Mode mode);
     /// Set the control switch.  3-position selector for selecting how to proceed when the
     /// "program start" key is pressed.
-    void set_control(Control_Mode mode);
+    void set_control_mode(Control_Mode mode);
     /// Set the display switch.  6-position switch for choosing the word displayed on the
     /// console.
-    void set_display(Display_Mode mode);
+    void set_display_mode(Display_Mode mode);
     /// Set the address switches.  4 digit selectors for the address used for manual operation.
     /// It's also the stop address in the "address stop" control mode.
+    void set_error_mode(Error_Mode mode);
     void set_address(const Address& address);
 
-    //! remove when not needed for testing
-    void set_accumulator(const Signed_Register<20>& reg);
-    void set_program_register(const Word& reg); //! make private
+    Control_Mode get_control_mode() const;
+    Display_Mode get_display_mode() const;
+
+#ifdef TEST
+    void set_distributor(const Word& reg);
+    void set_upper(const Word& reg);
+    void set_lower(const Word& reg);
+    void set_program_register(const Word& reg);
+    void set_drum(const Address& addr, const Word& data);
     void set_error();
+
+    Word get_drum(const Address& addr) const;
+#endif
 
     // Console Keys
 
@@ -145,16 +160,16 @@ private:
     /// Write a word to a storage address.
     void set_storage(const Address& address, const Word& word);
     /// @Return the word in the passed-in address.
-    const Word& get_storage(const Address& address) const;
+    const Word get_storage(const Address& address) const;
 
     enum class Operation
     {
         no_operation = 00,
         stop = 01,
         add_to_upper = 10,
+        store_distributor = 24,
         reset_and_add_to_lower = 65,
         load_distributor = 69,
-        next_instruction = 100,
     };
     Operation m_operation;
 
@@ -174,6 +189,7 @@ private:
     Half_Cycle_Mode m_cycle_mode;
     /// The state of the display switch.
     Display_Mode m_display_mode;
+    Error_Mode m_error_mode;
     /// The state of the storage entry switches.
     Word m_storage_entry;
     /// The state of the address switches.
@@ -208,19 +224,24 @@ private:
     std::array<Word, m_drum_capacity> m_drum;
     std::size_t m_drum_index;
 
-    std::vector<std::function<bool()>>::iterator m_next_op_it;
-    std::map<Operation, std::vector<std::function<bool()>>> m_operation_map;
+    using Op_Sequence = std::vector<std::function<bool()>>;
+    Op_Sequence m_next_instruction_step;
+    Op_Sequence::iterator m_next_op_it;
+    std::vector<Op_Sequence> m_operation_steps;
+
+    std::size_t operation_index(Operation op) const;
+
     // Operation steps
     bool instruction_to_program_register();
     bool op_and_address_to_registers();
     bool instruction_address_to_address_register();
+    bool enable_program_register();
     bool enable_distributor();
     bool data_to_distributor();
-    bool wait_for_even();
     bool distributor_to_accumulator();
     bool remove_interlock_a();
-    bool instruction_address_to_register();
-    bool enable_program_register();
+    bool enable_position_set();
+    bool store_distributor();
 };
 }
 

@@ -10,8 +10,8 @@
 top="$(CURDIR)"/
 ede_FILES=Project.ede Makefile
 
-test_SOURCES=computer.cpp register.cpp test_computer.cpp test.cpp
-test_OBJ= computer.o register.o test_computer.o test.o
+test_SOURCES=computer.cpp register.cpp test_computer.cpp test_opcodes.cpp test.cpp
+test_OBJ= computer.o register.o test_computer.o test_opcodes.cpp test.o
 CXX= g++ -g
 CXX_COMPILE=$(CXX) $(DEFS) $(INCLUDES) $(CPPFLAGS) $(CFLAGS)
 CXX_DEPENDENCIES=-Wp,-MD,.deps/$(*F).P
@@ -21,7 +21,7 @@ VERSION=1.0
 DISTDIR=$(top)IBM650-$(VERSION)
 top_builddir = 
 
-DEP_FILES=.deps/computer.P .deps/register.P .deps/drum.P .deps/test_computer.P .deps/test_drum.P .deps/test_register.P .deps/test.P .deps/register.P .deps/computer.P .deps/drum.P
+DEP_FILES=.deps/computer.P .deps/register.P .deps/drum.P .deps/test_computer.P .deps/test_opcodes.P .deps/test.P .deps/register.P .deps/computer.P .deps/drum.P
 
 all: test
 

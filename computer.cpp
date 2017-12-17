@@ -12,6 +12,9 @@ namespace
     const TTime blower_off_delay_seconds = 300;
 
     const Address storage_entry_address({8,0,0,0});
+    const Address distributor_address({8,0,0,1});
+    const Address lower_accumulator_address({8,0,0,2});
+    const Address upper_accumulator_address({8,0,0,3});
     //! other 800x addresses.
 }
 
@@ -33,34 +36,27 @@ Computer::Computer()
       m_error_sense(false),
       m_drum_index(0)
 {
-    m_operation_map[Operation::next_instruction] = {
+    m_next_instruction_step = {
         std::bind(&Computer::instruction_to_program_register, this),
         std::bind(&Computer::op_and_address_to_registers, this),
-        // Operation starts here.
         std::bind(&Computer::instruction_address_to_address_register, this),
         std::bind(&Computer::enable_program_register, this)
     };
-    m_next_op_it = m_operation_map[Operation::next_instruction].begin();
 
-    m_operation_map[Operation::no_operation] = {};
-    m_operation_map[Operation::stop] = {};
-    m_operation_map[Operation::add_to_upper] = {
+    m_operation_steps.resize(4);
+    m_operation_steps[1] = {
         std::bind(&Computer::enable_distributor, this),
-        std::bind(&Computer::data_to_distributor, this),
-        std::bind(&Computer::wait_for_even, this),
-        std::bind(&Computer::distributor_to_accumulator, this),
-        std::bind(&Computer::remove_interlock_a, this),
+        std::bind(&Computer::data_to_distributor, this)
     };
-    m_operation_map[Operation::reset_and_add_to_lower] = {
+    m_operation_steps[2] = {
         std::bind(&Computer::enable_distributor, this),
         std::bind(&Computer::data_to_distributor, this),
-        std::bind(&Computer::wait_for_even, this),
         std::bind(&Computer::distributor_to_accumulator, this),
-        std::bind(&Computer::remove_interlock_a, this),
+        std::bind(&Computer::remove_interlock_a, this)
     };
-    m_operation_map[Operation::load_distributor] = {
-        std::bind(&Computer::enable_distributor, this),
-        std::bind(&Computer::data_to_distributor, this),
+    m_operation_steps[3] = {
+        std::bind(&Computer::enable_position_set, this),
+        std::bind(&Computer::store_distributor, this)
     };
 }
 
@@ -139,17 +135,17 @@ void Computer::set_storage_entry(const Word& word)
     m_storage_entry = word;
 }
 
-void Computer::set_programmed(Programmed_Mode mode)
+void Computer::set_programmed_mode(Programmed_Mode mode)
 {
     m_programmed_mode = mode;
 }
 
-void Computer::set_half_cycle(Half_Cycle_Mode mode)
+void Computer::set_half_cycle_mode(Half_Cycle_Mode mode)
 {
     m_cycle_mode = mode;
 }
 
-void Computer::set_control(Control_Mode mode)
+void Computer::set_control_mode(Control_Mode mode)
 {
     if (mode == m_control_mode)
         return;
@@ -163,9 +159,14 @@ void Computer::set_control(Control_Mode mode)
     }
 }
 
-void Computer::set_display(Display_Mode mode)
+void Computer::set_display_mode(Display_Mode mode)
 {
     m_display_mode = mode;
+}
+
+void Computer::set_error_mode(Error_Mode mode)
+{
+    m_error_mode = mode;
 }
 
 void Computer::set_address(const Address& address)
@@ -173,25 +174,14 @@ void Computer::set_address(const Address& address)
     m_address_entry = address;
 }
 
-void Computer::set_accumulator(const Signed_Register<20>& reg)
+Computer::Control_Mode Computer::get_control_mode() const
 {
-    m_accumulator = reg;
+    return m_control_mode;
 }
 
-void Computer::set_program_register(const Word& reg)
+Computer::Display_Mode Computer::get_display_mode() const
 {
-    m_program_register.load(reg, 0, 0);
-    // Copy the operation and address to those registers.
-    m_operation_register.load(reg, 0, 0);
-    m_address_register.load(reg, 2, 0);
-}
-
-void Computer::set_error()
-{
-    m_overflow = true;
-    m_storage_selection_error = true;
-    m_clocking_error = true;
-    m_error_sense = true;
+    return m_display_mode;
 }
 
 void Computer::transfer()
@@ -201,8 +191,26 @@ void Computer::transfer()
         m_address_register = m_address_entry;
 }
 
+std::size_t Computer::operation_index(Operation op) const
+{
+    switch (op)
+    {
+    case Operation::no_operation:
+    case Operation::stop:
+        return 0;
+    case Operation::load_distributor:
+        return 1;
+    case Operation::add_to_upper:
+    case Operation::reset_and_add_to_lower:
+        return 2;
+    case Operation::store_distributor:
+        return 3;
+    }
+}
+
 void Computer::program_start()
 {
+    std::cerr << "program start\n";
     if (m_control_mode == Control_Mode::manual)
     {
         m_distributor = m_storage_entry;
@@ -231,7 +239,7 @@ void Computer::program_start()
         {
             std::cerr << "I\n";
             // Load the data address.
-            for (m_next_op_it = m_operation_map[Operation::next_instruction].begin();
+            for (m_next_op_it = m_next_instruction_step.begin();
                  m_half_cycle == Half_Cycle::instruction; )
             {
                 if ((*m_next_op_it)())
@@ -242,7 +250,7 @@ void Computer::program_start()
             if (m_cycle_mode == Half_Cycle_Mode::half)
                 return;
         }
-
+        // m_half_cycle changes during execution.  The ifs are not exclusive.
         if (m_half_cycle == Half_Cycle::data)
         {
             m_operation = Operation(m_operation_register.value());
@@ -250,9 +258,10 @@ void Computer::program_start()
             m_operation_register.clear();
 
             bool restarted = false;
-            auto op_end = m_operation_map[m_operation].end();
-            auto inst_end = m_operation_map[Operation::next_instruction].end();
-            for (auto op_it = m_operation_map[m_operation].begin();
+            auto op_seq = m_operation_steps[operation_index(m_operation)];
+            auto op_end = op_seq.end();
+            auto inst_end = m_next_instruction_step.end();
+            for (auto op_it = op_seq.begin();
                  op_it != op_end || m_next_op_it != inst_end; )
             {
                 if (op_it != op_end)
@@ -276,7 +285,6 @@ void Computer::program_start()
                 ++m_run_time;
                 m_drum_index = (m_drum_index + 1) % 50;
             }
-
             if (m_cycle_mode == Half_Cycle_Mode::half)
                 return;
         }
@@ -294,6 +302,7 @@ void Computer::program_reset()
 
     m_storage_selection_error = false;
     m_clocking_error = false;
+    m_half_cycle = Half_Cycle::instruction;
     m_run_time = 0;
 }
 
@@ -416,20 +425,31 @@ int Computer::run_time() const
 
 void Computer::set_storage(const Address& address, const Word& word)
 {
-    //!need to wait for location to pass read head.
     m_drum[address.value()] = word;
 }
 
-const Word& Computer::get_storage(const Address& address) const
+const Word Computer::get_storage(const Address& address) const
 {
     std::cerr << "get_storage " << address.value() << std::endl;
     assert(!address.is_blank());
     if (address == storage_entry_address)
         return m_storage_entry;
+    else if (address == distributor_address)
+        return m_distributor;
+    else if (address == lower_accumulator_address)
+    {
+        Word lower;
+        lower.load(m_accumulator, 10, 0);
+        return lower;
+    }
+    else if (address == upper_accumulator_address)
+    {
+        Word upper;
+        upper.load(m_accumulator, 0, 0);
+        upper.digits().back() = bin('_');
+        return upper;
+    }
 
-    //! other 800x addresses
-
-    //!need to wait for location to pass read head.
     assert(address.value() < m_drum.size());
     return m_drum[address.value()];
 }
@@ -469,6 +489,13 @@ bool Computer::instruction_address_to_address_register()
     return true;
 }
 
+bool Computer::enable_program_register()
+{
+    std::cerr << "enable PR\n";
+    return true;
+}
+
+
 bool Computer::enable_distributor()
 {
     std::cerr << m_run_time << " enable distributor\n";
@@ -481,25 +508,28 @@ bool Computer::data_to_distributor()
               << " drum=" << m_drum_index << std::endl;
 
     TValue addr = m_address_register.value();
-    if (addr >= 8000 || m_drum_index == addr % 50)
+    if (addr >= storage_entry_address.value() || m_drum_index == addr % 50)
     {
+        TDigit sign = m_distributor.digits().back();
         m_distributor = get_storage(m_address_register);
+        // Loading the upper accumulator should not disturb the sign.
+        if (m_address_register == upper_accumulator_address)
+            m_distributor.digits().back() = sign;
+
         std::cerr << "data to dist: dist=" << m_distributor << std::endl;
         return true;
     }
     return false;
 }
 
-bool Computer::wait_for_even()
-{
-    std::cerr << "wait for even\n";
-    return true;
-}
-
 bool Computer::distributor_to_accumulator()
 {
     std::cerr << m_run_time << " Dist to Acc: Dist=" << m_distributor << std::endl;
 
+    // Wait for even time
+    if (!m_restart && m_run_time % 2 != 0)
+        return false;
+    
     // Start looking for next instruction.
     m_restart = true;
 
@@ -535,9 +565,71 @@ bool Computer::remove_interlock_a()
     return true;
 }
 
-bool Computer::enable_program_register()
+bool Computer::enable_position_set()
 {
-    std::cerr << "enable PR\n";
     return true;
 }
 
+bool Computer::store_distributor()
+{
+    std::cerr << m_run_time << " store dist: addr=" << m_address_register
+              << " dist=" << m_distributor << std::endl;
+
+    TValue addr = m_address_register.value();
+    if (addr >= m_drum_capacity)
+    {
+        m_storage_selection_error = true;
+        return true;
+    }
+    if (m_drum_index == addr % 50)
+    {
+        set_storage(m_address_register, m_distributor);
+        return true;
+    }
+    return false;
+}
+
+#ifdef TEST
+void Computer::set_distributor(const Word& reg)
+{
+    m_distributor = reg;
+}
+
+void Computer::set_upper(const Word& reg)
+{
+    Register<10> upper;
+    upper.load(reg, 0, 0);
+    m_accumulator.load(upper, 0, 0);
+}
+
+void Computer::set_lower(const Word& reg)
+{
+    m_accumulator.load(reg, 0, 10);
+}
+
+void Computer::set_program_register(const Word& reg)
+{
+    m_program_register.load(reg, 0, 0);
+    // Copy the operation and address to those registers.
+    m_operation_register.load(reg, 0, 0);
+    m_address_register.load(reg, 2, 0);
+}
+
+void Computer::set_drum(const Address& address, const Word& word)
+{
+    m_drum[address.value()] = word;
+}
+
+void Computer::set_error()
+{
+    m_overflow = true;
+    m_storage_selection_error = true;
+    m_clocking_error = true;
+    m_error_sense = true;
+}
+
+Word Computer::get_drum(const Address& address) const
+{
+    return m_drum[address.value()];
+}
+#endif // TEST
