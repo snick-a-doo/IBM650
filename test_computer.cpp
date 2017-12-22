@@ -181,7 +181,7 @@ BOOST_AUTO_TEST_CASE(accumulator_reset_manual)
     f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
     BOOST_CHECK_EQUAL(f.computer.display(), Word({2,1, 2,2,2,3, 2,4,2,5, '+'}));
     f.computer.set_display_mode(Computer::Display_Mode::upper_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({10,1, 1,2,1,3, 1,4,1,5, '_'}));
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({10,1, 1,2,1,3, 1,4,1,5, '+'}));
     f.computer.set_display_mode(Computer::Display_Mode::distributor);
     BOOST_CHECK_EQUAL(f.computer.display(), Word({3,10, 3,2,3,3, 3,4,3,5, '-'}));
     f.computer.set_display_mode(Computer::Display_Mode::program_register);
@@ -202,7 +202,7 @@ BOOST_AUTO_TEST_CASE(accumulator_reset_manual)
     f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
     BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
     f.computer.set_display_mode(Computer::Display_Mode::upper_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
     f.computer.set_display_mode(Computer::Display_Mode::distributor);
     BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
 
@@ -251,7 +251,7 @@ BOOST_AUTO_TEST_CASE(computer_reset_manual)
     f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
     BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
     f.computer.set_display_mode(Computer::Display_Mode::upper_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
     f.computer.set_display_mode(Computer::Display_Mode::distributor);
     BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
     BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
@@ -268,7 +268,7 @@ BOOST_AUTO_TEST_CASE(computer_reset_run)
     f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
     BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
     f.computer.set_display_mode(Computer::Display_Mode::upper_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
     f.computer.set_display_mode(Computer::Display_Mode::distributor);
     BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
     BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
@@ -390,7 +390,7 @@ BOOST_AUTO_TEST_CASE(start_program)
 
     f.computer.computer_reset();
     f.computer.program_start();
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,3, 4,3,4,2, '_'}));
+    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,3, 4,3,4,2, '+'}));
 }
 
 struct LD_Fixture : public Run_Fixture

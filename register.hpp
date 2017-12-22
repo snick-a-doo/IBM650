@@ -180,6 +180,8 @@ namespace IBM650
 
         /// Set the digits to the passed-in integer.  Set the sign to the passed-in sign.
         void fill(TDigit digit, TDigit sign);
+
+        TDigit sign() const;
     };
 
     template <std::size_t N>
@@ -208,6 +210,16 @@ namespace IBM650
     }
 
     template <std::size_t N>
+    TDigit Signed_Register<N>::sign() const
+    {
+        TDigit n = dec(Register<N+1>::digits().back());
+        return n == 9 ? '+'
+            : n == 8 ? '-'
+            : n == 0 ? '_'
+            : '?';
+    }
+
+    template <std::size_t N>
     Signed_Register<N> shift(const Signed_Register<N>& reg, std::size_t left)
     {
         Signed_Register<N> out(reg);
@@ -220,22 +232,75 @@ namespace IBM650
     }
 
     template <std::size_t N>
+    Signed_Register<N> abs(const Signed_Register<N>& reg)
+    {
+        Signed_Register<N> out(reg);
+        out.digits().back() = bin('+');
+        return out;
+    }
+
+    template <std::size_t N>
+    Signed_Register<N> change_sign(const Signed_Register<N>& reg)
+    {
+        Signed_Register<N> out(reg);
+        out.digits().back() = out.sign() == '+' ? bin('-') : bin('+');
+        return out;
+    }
+
+    template <std::size_t N>
     Signed_Register<N> add(const Signed_Register<N>& lhs,
                            const Signed_Register<N>& rhs,
                            TDigit& carry)
     {
-        //! check the signs
         carry = 0;
+        if (lhs.sign() != rhs.sign())
+        {
+            if (rhs.sign() == '-')
+                return subtract(lhs, abs(rhs));
+            return subtract(rhs, abs(lhs));
+        }
         std::array<TDigit, N+1> sum;
         for (std::size_t i = 0; i < N; ++i)
         {
-            std::size_t place = N - i - 1;
-            TDigit digit = carry + dec(lhs.digits()[place]) + dec(rhs.digits()[place]);
+            auto place = N - i - 1;
+            auto digit = carry + dec(lhs.digits()[place]) + dec(rhs.digits()[place]);
             sum[place] = digit % 10;
             carry = digit/10;
         }
-        sum[N] = bin('+');
+        sum[N] = lhs.sign();
         return Signed_Register<N>(sum);
+    }
+
+    template <std::size_t N>
+    Signed_Register<N> subtract(const Signed_Register<N>& lhs,
+                                const Signed_Register<N>& rhs)
+    {
+        std::array<TDigit, N+1> diff;
+        TDigit carry = 0;
+        for (std::size_t i = 0; i < N; ++i)
+        {
+            auto place = N - i - 1;
+            auto l = dec(lhs.digits()[place]);
+            auto r = dec(rhs.digits()[place]) + carry;
+            if (l >= r)
+            {
+                diff[place] = l - r;
+                carry = 0;
+            }
+            else
+            {
+                diff[place] = 10 - (r - l);
+                carry = 1;
+            }
+        }
+        if (carry == 1)
+            return change_sign(subtract(rhs, lhs));
+
+        diff[N] = lhs.sign();
+        for (auto i : diff)
+            std::cerr << ' ' << int(i);
+        std::cerr << std::endl;
+        return Signed_Register<N>(diff);
     }
 }
 

@@ -15,7 +15,6 @@ namespace
     const Address distributor_address({8,0,0,1});
     const Address lower_accumulator_address({8,0,0,2});
     const Address upper_accumulator_address({8,0,0,3});
-    //! other 800x addresses.
 }
 
 /// The initial state is: powered off for long enough that the blower is off.
@@ -201,7 +200,13 @@ std::size_t Computer::operation_index(Operation op) const
     case Operation::load_distributor:
         return 1;
     case Operation::add_to_upper:
-    case Operation::reset_and_add_to_lower:
+    case Operation::subtract_from_upper:
+    case Operation::add_to_lower:
+    case Operation::subtract_from_lower:
+    case Operation::reset_and_add_into_upper:
+    case Operation::reset_and_subtract_into_upper:
+    case Operation::reset_and_add_into_lower:
+    case Operation::reset_and_subtract_into_lower:
         return 2;
     case Operation::store_distributor:
         return 3;
@@ -349,7 +354,7 @@ Word Computer::display() const
     {
         Word upper;
         upper.load(m_accumulator, 0, 0);
-        upper.digits().back() = bin('_');
+        upper.digits().back() = m_accumulator.digits().back();
         return upper;
     }
     case Display_Mode::program_register:
@@ -539,23 +544,48 @@ bool Computer::distributor_to_accumulator()
 
     //! compliment takes more cycles
 
+    Signed_Register<20> rhs;
+    rhs.fill(0, '+');
+    char carry;
     switch (m_operation)
     {
-    case Operation::reset_and_add_to_lower:
-        m_accumulator.load(m_distributor, 0, 10);
-        return true;
     case Operation::add_to_upper:
-    {
-        Signed_Register<20> rhs;
         rhs.load(m_distributor, 0, 10);
-        char carry;
         m_accumulator = add(m_accumulator, shift(rhs, 10), carry);
-        return true;
-    }
+        break;
+    case Operation::subtract_from_upper:
+        rhs.load(m_distributor, 0, 10);
+        m_accumulator = add(m_accumulator, change_sign(shift(rhs, 10)), carry);
+        break;
+    case Operation::add_to_lower:
+        rhs.load(m_distributor, 0, 10);
+        m_accumulator = add(m_accumulator, rhs, carry);
+        break;
+    case Operation::subtract_from_lower:
+        rhs.load(m_distributor, 0, 10);
+        m_accumulator = add(m_accumulator, change_sign(rhs), carry);
+        break;
+    case Operation::reset_and_add_into_upper:
+        rhs.load(m_distributor, 0, 10);
+        m_accumulator = shift(rhs, 10);
+        break;
+    case Operation::reset_and_subtract_into_upper:
+        rhs.load(m_distributor, 0, 10);
+        m_accumulator = change_sign(shift(rhs, 10));
+        break;
+    case Operation::reset_and_add_into_lower:
+        rhs.load(m_distributor, 0, 10);
+        m_accumulator = rhs;
+        break;
+    case Operation::reset_and_subtract_into_lower:
+        rhs.load(m_distributor, 0, 10);
+        m_accumulator = change_sign(rhs);
+        break;
     default:
         assert(false);
-        return true;
     }
+    m_overflow = carry > 0;
+    return true;
 }
 
 bool Computer::remove_interlock_a()

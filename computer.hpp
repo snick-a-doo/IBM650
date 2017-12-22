@@ -80,6 +80,9 @@ public:
     /// Set the storage-entry switches.  10 digit selectors and 1 sign selector for the word at
     /// address 8000.
     void set_storage_entry(const Word& word);
+    //// Set the "programmed" switch.  When set to "stop", "stop" instructions halt the
+    //// program.  When set to "run", stops are ignored.  This lets stops act like
+    //// breakpoints.
     void set_programmed_mode(Programmed_Mode mode);
     /// Set the half-cycle switch.  2-position selector for continuous or stepped running.
     void set_half_cycle_mode(Half_Cycle_Mode mode);
@@ -89,15 +92,20 @@ public:
     /// Set the display switch.  6-position switch for choosing the word displayed on the
     /// console.
     void set_display_mode(Display_Mode mode);
+    /// Set the error switch.  When set to "stop", errors halt the program.  When set to
+    /// "sense", execution continues with the instruction in the storage-entry switches.
+    void set_error_mode(Error_Mode mode);
     /// Set the address switches.  4 digit selectors for the address used for manual operation.
     /// It's also the stop address in the "address stop" control mode.
-    void set_error_mode(Error_Mode mode);
     void set_address(const Address& address);
 
+    /// @Return the state of the control switch.
     Control_Mode get_control_mode() const;
+    /// @Return the state of the display switch.
     Display_Mode get_display_mode() const;
 
 #ifdef TEST
+    // Direct access to the machine's state for unit tests.
     void set_distributor(const Word& reg);
     void set_upper(const Word& reg);
     void set_lower(const Word& reg);
@@ -112,10 +120,15 @@ public:
 
     /// Press the transfer key.  Sets the address register but only in manual control.
     void transfer();
+    /// Start program execution.
     void program_start();
+    /// Reset registers and errors to prepare to run a program.
     void program_reset();
+    /// Full reset: roughly equivalent to doing the three other resets.
     void computer_reset();
+    /// Set the accumulator and distributor to zero and reset errors.
     void accumulator_reset();
+    /// Reset errors.
     void error_reset();
     void error_sense_reset();
 
@@ -167,8 +180,14 @@ private:
         no_operation = 00,
         stop = 01,
         add_to_upper = 10,
+        subtract_from_upper = 11,
+        add_to_lower = 15,
+        subtract_from_lower = 16,
         store_distributor = 24,
-        reset_and_add_to_lower = 65,
+        reset_and_add_into_upper = 60,
+        reset_and_subtract_into_upper = 61,
+        reset_and_add_into_lower = 65,
+        reset_and_subtract_into_lower = 66,
         load_distributor = 69,
     };
     Operation m_operation;
@@ -219,16 +238,22 @@ private:
     bool m_clocking_error;
     bool m_error_sense;
 
-    //!drum class?
+    /// The number of words that can be stored on the drum.
     constexpr static size_t m_drum_capacity = 2000;
+    /// The words stored on the drum.
     std::array<Word, m_drum_capacity> m_drum;
+    /// The drum position, 0-49.  Determines which addresses are at the read head.
     std::size_t m_drum_index;
 
     using Op_Sequence = std::vector<std::function<bool()>>;
+    /// The common steps for finding and loading the next instruction.
     Op_Sequence m_next_instruction_step;
+    /// The current position in the next-instruction steps.
     Op_Sequence::iterator m_next_op_it;
+    /// The sequence of steps specific to an operation.  Operations that have the same sequence
+    /// of steps (like addition and subtraction operation) use the same sequence.
     std::vector<Op_Sequence> m_operation_steps;
-
+    /// @Return the index into the operation sequence vector for the given opcode.
     std::size_t operation_index(Operation op) const;
 
     // Operation steps
