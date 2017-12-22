@@ -41,6 +41,9 @@ struct Opcode_Fixture : Computer_Ready_Fixture
     Opcode_Fixture(int opcode, const Address& addr, const Word& distr)
         : Opcode_Fixture(opcode, Word(), addr, Word(), Word(), distr)
         {}
+    Opcode_Fixture(int opcode, const Address& addr)
+        : Opcode_Fixture(opcode, Word(), addr, Word(), Word(), Word())
+        {}
 
     Word distributor() {
         computer.set_display_mode(Computer::Display_Mode::distributor);
@@ -117,17 +120,15 @@ BOOST_AUTO_TEST_CASE(store_distributor)
 
 BOOST_AUTO_TEST_CASE(store_distributor_800x)
 {
-    Word distr({0,0, 0,1,0,4, 2,6,6,6, '-'});
-
-    { Opcode_Fixture f(24, Address({2,0,0,0}), distr);
+    { Opcode_Fixture f(24, Address({2,0,0,0}));
         BOOST_CHECK(f.computer.storage_selection_error()); }
-    { Opcode_Fixture f(24, Address({8,0,0,3}), distr);
+    { Opcode_Fixture f(24, Address({8,0,0,3}));
         BOOST_CHECK(f.computer.storage_selection_error()); }
-    { Opcode_Fixture f(24, Address({8,0,0,1}), distr);
+    { Opcode_Fixture f(24, Address({8,0,0,1}));
         BOOST_CHECK(f.computer.storage_selection_error()); }
-    { Opcode_Fixture f(24, Address({8,0,0,2}), distr);
+    { Opcode_Fixture f(24, Address({8,0,0,2}));
         BOOST_CHECK(f.computer.storage_selection_error()); }
-    { Opcode_Fixture f(24, Address({8,0,0,3}), distr);
+    { Opcode_Fixture f(24, Address({8,0,0,3}));
         BOOST_CHECK(f.computer.storage_selection_error()); }
 }
 
@@ -849,4 +850,80 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_into_lower_8001)
     BOOST_CHECK_EQUAL(f.upper(), upper_sum);
     BOOST_CHECK_EQUAL(f.lower(), lower_sum);
     BOOST_CHECK(!f.computer.overflow());
+}
+
+// 20  STL  Store Lower in Memory
+BOOST_AUTO_TEST_CASE(store_lower_in_memory)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,4, 0,4,5,3, 2,8,7,7, '-'});
+    Word lower({0,0, 0,0,5,5, 3,8,2,2, '-'});
+    Word distr({0,0, 0,0,0,1, 2,9,9,8, '+'});
+
+    Opcode_Fixture f(20, distr, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), lower);
+    BOOST_CHECK_EQUAL(f.upper(), upper);
+    BOOST_CHECK_EQUAL(f.lower(), lower);
+    BOOST_CHECK_EQUAL(f.drum(addr), lower);
+}
+
+// 21  STU  Store Upper in Memory
+BOOST_AUTO_TEST_CASE(store_upper_in_memory_1)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,4, 0,4,5,3, 2,8,7,7, '+'});
+    Word lower({0,0, 0,0,5,5, 3,8,2,2, '+'});
+    Word distr({0,0, 0,0,0,1, 2,9,9,8, '+'});
+
+    Opcode_Fixture f(21, distr, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), upper);
+    BOOST_CHECK_EQUAL(f.upper(), upper);
+    BOOST_CHECK_EQUAL(f.lower(), lower);
+    BOOST_CHECK_EQUAL(f.drum(addr), upper);
+}
+
+BOOST_AUTO_TEST_CASE(store_upper_in_memory_2)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,4, 0,4,5,3, 2,8,7,7, '-'});
+    Word lower({0,0, 0,0,5,5, 3,8,2,2, '-'});
+    Word distr({0,0, 0,0,0,1, 2,9,9,8, '+'});
+
+    Opcode_Fixture f(21, distr, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), upper);
+    BOOST_CHECK_EQUAL(f.upper(), upper);
+    BOOST_CHECK_EQUAL(f.lower(), lower);
+    BOOST_CHECK_EQUAL(f.drum(addr), upper);
+}
+
+BOOST_AUTO_TEST_CASE(store_upper_in_memory_3)
+{
+    Word data({0,1, 3,6,5,4, 3,2,1,0, '+'});
+    Address addr({1,0,0,0});
+    Word remainder({0,0, 0,6,3,4, 9,2,1,1, '-'});
+    Word quotient({0,0, 1,4,9,8, 7,6,2,1, '+'});
+    Word distr({0,0, 0,6,4,3, 2,1,9,8, '+'});
+
+    Opcode_Fixture f(21, distr, addr, remainder, quotient, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), remainder);
+    BOOST_CHECK_EQUAL(f.upper(), remainder);
+    BOOST_CHECK_EQUAL(f.lower(), quotient);
+    BOOST_CHECK_EQUAL(f.drum(addr), remainder);
+}
+
+BOOST_AUTO_TEST_CASE(store_upper_in_memory_800x)
+{
+    { Opcode_Fixture f(21, Address({2,0,0,0}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(21, Address({8,0,0,3}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(21, Address({8,0,0,1}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(21, Address({8,0,0,2}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(21, Address({8,0,0,3}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
 }

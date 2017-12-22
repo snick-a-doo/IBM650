@@ -183,6 +183,8 @@ private:
         subtract_from_upper = 11,
         add_to_lower = 15,
         subtract_from_lower = 16,
+        store_lower_in_memory = 20,
+        store_upper_in_memory = 21,
         store_distributor = 24,
         reset_and_add_into_upper = 60,
         reset_and_subtract_into_upper = 61,

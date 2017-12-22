@@ -43,7 +43,7 @@ Computer::Computer()
         std::bind(&Computer::enable_program_register, this)
     };
 
-    m_operation_steps.resize(4);
+    m_operation_steps.resize(5);
     m_operation_steps[1] = {
         std::bind(&Computer::enable_distributor, this),
         std::bind(&Computer::data_to_distributor, this)
@@ -56,6 +56,11 @@ Computer::Computer()
     };
     m_operation_steps[3] = {
         std::bind(&Computer::enable_position_set, this),
+        std::bind(&Computer::store_distributor, this)
+    };
+    m_operation_steps[4] = {
+        std::bind(&Computer::enable_distributor, this),
+        std::bind(&Computer::data_to_distributor, this),
         std::bind(&Computer::store_distributor, this)
     };
 }
@@ -211,6 +216,9 @@ std::size_t Computer::operation_index(Operation op) const
         return 2;
     case Operation::store_distributor:
         return 3;
+    case Operation::store_lower_in_memory:
+    case Operation::store_upper_in_memory:
+        return 4;
     }
 }
 
@@ -510,10 +518,14 @@ bool Computer::data_to_distributor()
     std::cerr << m_run_time << " data to dist: addr=" << m_address_register
               << " drum=" << m_drum_index << std::endl;
 
-    auto addr = m_address_register.value();
-    if (addr >= storage_entry_address.value() || m_drum_index == addr % 50)
+    auto addr = m_address_register;
+    if (m_operation == Operation::store_lower_in_memory)
+        addr = lower_accumulator_address;
+    else if (m_operation == Operation::store_upper_in_memory)
+        addr = upper_accumulator_address;
+    if (addr.value() >= storage_entry_address.value() || m_drum_index == addr.value() % 50)
     {
-        m_distributor = get_storage(m_address_register);
+        m_distributor = get_storage(addr);
         std::cerr << "data to dist: dist=" << m_distributor << std::endl;
         return true;
     }
