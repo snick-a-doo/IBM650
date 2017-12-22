@@ -35,6 +35,7 @@ Computer::Computer()
       m_error_sense(false),
       m_drum_index(0)
 {
+    // Define the step sequences for the types of operations.
     m_next_instruction_step = {
         std::bind(&Computer::instruction_to_program_register, this),
         std::bind(&Computer::op_and_address_to_registers, this),
@@ -247,6 +248,7 @@ void Computer::program_start()
             for (m_next_op_it = m_next_instruction_step.begin();
                  m_half_cycle == Half_Cycle::instruction; )
             {
+                // Execute the operation.  Go on to the next operation if this one is done.
                 if ((*m_next_op_it)())
                     ++m_next_op_it;
                 ++m_run_time;
@@ -266,13 +268,16 @@ void Computer::program_start()
             auto op_seq = m_operation_steps[operation_index(m_operation)];
             auto op_end = op_seq.end();
             auto inst_end = m_next_instruction_step.end();
+            // The operation sequence and the next address sequence may happen in parallel.
+            // Loop until both are done.
             for (auto op_it = op_seq.begin();
                  op_it != op_end || m_next_op_it != inst_end; )
             {
                 if (op_it != op_end)
                     if ((*op_it)())
                         ++op_it;
-
+                // Don't bother looking for the next address if the program is done.
+                //! m_programmed_mode must be "stop"
                 if (m_operation == Operation::stop && op_it == op_end)
                     return;
 
@@ -345,18 +350,9 @@ Word Computer::display() const
     switch (m_display_mode)
     {
     case Display_Mode::lower_accumulator:
-    {
-        Word lower;
-        lower.load(m_accumulator, 10, 0);
-        return lower;
-    }
+        return get_storage(lower_accumulator_address);
     case Display_Mode::upper_accumulator:
-    {
-        Word upper;
-        upper.load(m_accumulator, 0, 0);
-        upper.digits().back() = m_accumulator.digits().back();
-        return upper;
-    }
+        return get_storage(upper_accumulator_address);
     case Display_Mode::program_register:
         return Word(m_program_register, '_');
     default:
@@ -408,7 +404,7 @@ bool Computer::storage_selection_error() const
 {
     if (m_address_register.is_blank())
         return false;
-    int address = m_address_register.value();
+    auto address = m_address_register.value();
     return (address > 1999 && (address < storage_entry_address.value() || address > 8003))
         || m_storage_selection_error;
 }
@@ -451,7 +447,9 @@ const Word Computer::get_storage(const Address& address) const
     {
         Word upper;
         upper.load(m_accumulator, 0, 0);
-        upper.digits().back() = bin('_');
+        // Copy the accumulator sign.
+        //! Upper sign may be different after division.
+        upper.digits().back() = m_accumulator.digits().back();
         return upper;
     }
 
@@ -512,15 +510,10 @@ bool Computer::data_to_distributor()
     std::cerr << m_run_time << " data to dist: addr=" << m_address_register
               << " drum=" << m_drum_index << std::endl;
 
-    TValue addr = m_address_register.value();
+    auto addr = m_address_register.value();
     if (addr >= storage_entry_address.value() || m_drum_index == addr % 50)
     {
-        TDigit sign = m_distributor.digits().back();
         m_distributor = get_storage(m_address_register);
-        // Loading the upper accumulator should not disturb the sign.
-        if (m_address_register == upper_accumulator_address)
-            m_distributor.digits().back() = sign;
-
         std::cerr << "data to dist: dist=" << m_distributor << std::endl;
         return true;
     }
@@ -542,43 +535,34 @@ bool Computer::distributor_to_accumulator()
     if (m_run_time % 2 == 0)
         return false;
 
-    //! compliment takes more cycles
-
     Signed_Register<20> rhs;
     rhs.fill(0, '+');
+    rhs.load(m_distributor, 0, 10);
     char carry;
     switch (m_operation)
     {
     case Operation::add_to_upper:
-        rhs.load(m_distributor, 0, 10);
         m_accumulator = add(m_accumulator, shift(rhs, 10), carry);
         break;
     case Operation::subtract_from_upper:
-        rhs.load(m_distributor, 0, 10);
         m_accumulator = add(m_accumulator, change_sign(shift(rhs, 10)), carry);
         break;
     case Operation::add_to_lower:
-        rhs.load(m_distributor, 0, 10);
         m_accumulator = add(m_accumulator, rhs, carry);
         break;
     case Operation::subtract_from_lower:
-        rhs.load(m_distributor, 0, 10);
         m_accumulator = add(m_accumulator, change_sign(rhs), carry);
         break;
     case Operation::reset_and_add_into_upper:
-        rhs.load(m_distributor, 0, 10);
         m_accumulator = shift(rhs, 10);
         break;
     case Operation::reset_and_subtract_into_upper:
-        rhs.load(m_distributor, 0, 10);
         m_accumulator = change_sign(shift(rhs, 10));
         break;
     case Operation::reset_and_add_into_lower:
-        rhs.load(m_distributor, 0, 10);
         m_accumulator = rhs;
         break;
     case Operation::reset_and_subtract_into_lower:
-        rhs.load(m_distributor, 0, 10);
         m_accumulator = change_sign(rhs);
         break;
     default:
@@ -605,7 +589,7 @@ bool Computer::store_distributor()
     std::cerr << m_run_time << " store dist: addr=" << m_address_register
               << " dist=" << m_distributor << std::endl;
 
-    TValue addr = m_address_register.value();
+    auto addr = m_address_register.value();
     if (addr >= m_drum_capacity)
     {
         m_storage_selection_error = true;
