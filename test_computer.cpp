@@ -115,7 +115,7 @@ struct Reset_Fixture : public Drum_Storage_Fixture
     Reset_Fixture() {
         // Set the address switches and the distributor by side effect.
         store(Address({1,2,3,4}), Word({3,10, 3,2,3,3, 3,4,3,5, '-'}));
-        computer.set_upper(Word({10,1, 1,2,1,3, 1,4,1,5, '_'}));
+        computer.set_upper(Word({10,1, 1,2,1,3, 1,4,1,5, '+'}));
         computer.set_lower(Word({2,1, 2,2,2,3, 2,4,2,5, '+'}));
         computer.set_program_register(Word({1,2, 3,4,5,6, 7,8,9,10, '+'}));
         computer.set_error();

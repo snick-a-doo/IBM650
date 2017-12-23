@@ -249,7 +249,7 @@ BOOST_AUTO_TEST_CASE(add_to_lower_2)
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
-    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
     Word lower({9,9, 8,9,3,7, 4,6,2,7, '-'});
     Word distr(lower);
     Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '-'});

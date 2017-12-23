@@ -336,7 +336,8 @@ void Computer::computer_reset()
 void Computer::accumulator_reset()
 {
     m_distributor.fill(0, '+');
-    m_accumulator.fill(0, '+');
+    m_upper_accumulator.fill(0, '+');
+    m_lower_accumulator.fill(0, '+');
     m_overflow = false;
     m_storage_selection_error = false;
     m_clocking_error = false;
@@ -400,7 +401,7 @@ bool Computer::distributor_validity_error() const
 
 bool Computer::accumulator_validity_error() const
 {
-    return !m_accumulator.is_valid();
+    return !m_upper_accumulator.is_valid() || !m_lower_accumulator.is_valid();
 }
 
 bool Computer::program_register_validity_error() const
@@ -446,20 +447,9 @@ const Word Computer::get_storage(const Address& address) const
     else if (address == distributor_address)
         return m_distributor;
     else if (address == lower_accumulator_address)
-    {
-        Word lower;
-        lower.load(m_accumulator, 10, 0);
-        return lower;
-    }
+        return m_lower_accumulator;
     else if (address == upper_accumulator_address)
-    {
-        Word upper;
-        upper.load(m_accumulator, 0, 0);
-        // Copy the accumulator sign.
-        //! Upper sign may be different after division.
-        upper.digits().back() = m_accumulator.digits().back();
-        return upper;
-    }
+        return m_upper_accumulator;
 
     assert(address.value() < m_drum.size());
     return m_drum[address.value()];
@@ -547,35 +537,59 @@ bool Computer::distributor_to_accumulator()
     if (m_run_time % 2 == 0)
         return false;
 
-    Signed_Register<20> rhs;
-    rhs.fill(0, '+');
-    rhs.load(m_distributor, 0, 10);
-    char carry;
+    TDigit carry = 0;
+
+    // The manual says the upper sign is affected by reset, multiplying and dividing.
+    // Presumably addition should treat the upper and lower signs as independent, but this gets
+    // messy when carrying and complementing are needed.  It's easier to treat the accumulator
+    // as one big register with the sign of the lower and give the upper the sign of the
+    // result.  This strategy give the same answers as the examples in the manual.
+    auto add_accum = [&carry](Word& upper, Word& lower, const Word& reg, bool to_upper) {
+        // Make 20-digit registers for the accumulator and the argument.  Take the sign of the
+        // lower accumulator.
+        Signed_Register<20> accum;
+        accum.load(upper, 0, 0);
+        accum.load(lower, 0, 10);
+        Signed_Register<20> rhs;
+        rhs.fill(0, '+');
+        rhs.load(reg, 0, 10);
+        accum = add(accum, shift(rhs, to_upper ? 10 : 0), carry);
+        // Copy the upper and lower parts of the sums to the registers.  Copy the sign of the
+        // sum to both.
+        upper.load(accum, 0, 0);
+        upper.digits().back() = bin(accum.sign());
+        lower.load(accum, 10, 0);
+    };
+
     switch (m_operation)
     {
     case Operation::add_to_upper:
-        m_accumulator = add(m_accumulator, shift(rhs, 10), carry);
+        add_accum(m_upper_accumulator, m_lower_accumulator, m_distributor, true);
         break;
     case Operation::subtract_from_upper:
-        m_accumulator = add(m_accumulator, change_sign(shift(rhs, 10)), carry);
+        add_accum(m_upper_accumulator, m_lower_accumulator, change_sign(m_distributor), true);
         break;
     case Operation::add_to_lower:
-        m_accumulator = add(m_accumulator, rhs, carry);
+        add_accum(m_upper_accumulator, m_lower_accumulator, m_distributor, false);
         break;
     case Operation::subtract_from_lower:
-        m_accumulator = add(m_accumulator, change_sign(rhs), carry);
+        add_accum(m_upper_accumulator, m_lower_accumulator, change_sign(m_distributor), false);
         break;
     case Operation::reset_and_add_into_upper:
-        m_accumulator = shift(rhs, 10);
+        m_upper_accumulator = m_distributor;
+        m_lower_accumulator.fill(0, m_upper_accumulator.sign());
         break;
     case Operation::reset_and_subtract_into_upper:
-        m_accumulator = change_sign(shift(rhs, 10));
+        m_upper_accumulator = change_sign(m_distributor);
+        m_lower_accumulator.fill(0, m_upper_accumulator.sign());
         break;
     case Operation::reset_and_add_into_lower:
-        m_accumulator = rhs;
+        m_lower_accumulator = m_distributor;
+        m_upper_accumulator.fill(0, m_lower_accumulator.sign());
         break;
     case Operation::reset_and_subtract_into_lower:
-        m_accumulator = change_sign(rhs);
+        m_lower_accumulator = change_sign(m_distributor);
+        m_upper_accumulator.fill(0, m_lower_accumulator.sign());
         break;
     default:
         assert(false);
@@ -623,14 +637,12 @@ void Computer::set_distributor(const Word& reg)
 
 void Computer::set_upper(const Word& reg)
 {
-    Register<10> upper;
-    upper.load(reg, 0, 0);
-    m_accumulator.load(upper, 0, 0);
+    m_upper_accumulator = reg;
 }
 
 void Computer::set_lower(const Word& reg)
 {
-    m_accumulator.load(reg, 0, 10);
+    m_lower_accumulator = reg;
 }
 
 void Computer::set_program_register(const Word& reg)

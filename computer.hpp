@@ -219,7 +219,8 @@ private:
     // Registers
 
     Word m_distributor;
-    Signed_Register<20> m_accumulator;
+    Word m_upper_accumulator;
+    Word m_lower_accumulator;
     Register<10> m_program_register;
     Register<2> m_operation_register;
     Address m_address_register;
