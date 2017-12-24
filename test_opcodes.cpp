@@ -14,7 +14,7 @@ struct Opcode_Fixture : Computer_Ready_Fixture
                    const Word& lower,
                    const Word& distr)
         {
-            assert(addr.value() > 999);
+            assert(addr.value() > 99);
             Address next({0,0,2,0});
             Word instr;
             instr.digits()[0] = bin(opcode / 10);
@@ -156,7 +156,7 @@ BOOST_AUTO_TEST_CASE(add_to_upper_2)
     Word upper({0,0, 0,0,4,5, 8,6,3,2, '-'});
     Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
     Word distr(lower);
-    Word upper_sum({0,0, 1,1,8,8, 7,0,4,5, '+'});
+    Word upper_sum({0,0, 1,1,8,8, 7,0,4,5, '-'});
     Word lower_sum({1,0, 5,7,2,8, 8,6,3,5, '+'});
 
     Opcode_Fixture f(10, data, addr, upper, lower, distr);
@@ -333,7 +333,7 @@ BOOST_AUTO_TEST_CASE(subtract_from_upper_1)
     Word upper({0,0, 0,0,4,5, 8,6,3,2, '-'});
     Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
     Word distr(lower);
-    Word upper_sum({0,0, 1,1,8,8, 7,0,4,5, '+'});
+    Word upper_sum({0,0, 1,1,8,8, 7,0,4,5, '-'});
     Word lower_sum({1,0, 5,7,2,8, 8,6,3,5, '+'});
 
     Opcode_Fixture f(11, data, addr, upper, lower, distr);
@@ -397,7 +397,7 @@ BOOST_AUTO_TEST_CASE(subtract_from_upper_8002)
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
     Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
     Word distr(upper);
-    Word upper_sum({2,6, 0,3,9,9, 9,9,9,9, '-'});
+    Word upper_sum({2,6, 0,3,9,9, 9,9,9,9, '+'});
     Word lower_sum({6,1, 6,1,4,3, 2,1,1,0, '-'});
 
     Opcode_Fixture f(11, distr, addr, upper, lower, distr);
@@ -868,6 +868,20 @@ BOOST_AUTO_TEST_CASE(store_lower_in_memory)
     BOOST_CHECK_EQUAL(f.drum(addr), lower);
 }
 
+BOOST_AUTO_TEST_CASE(store_lower_in_memory_800x)
+{
+    { Opcode_Fixture f(20, Address({2,0,0,0}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(20, Address({8,0,0,3}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(20, Address({8,0,0,1}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(20, Address({8,0,0,2}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(20, Address({8,0,0,3}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+}
+
 // 21  STU  Store Upper in Memory
 BOOST_AUTO_TEST_CASE(store_upper_in_memory_1)
 {
@@ -926,4 +940,453 @@ BOOST_AUTO_TEST_CASE(store_upper_in_memory_800x)
         BOOST_CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(21, Address({8,0,0,3}));
         BOOST_CHECK(f.computer.storage_selection_error()); }
+}
+
+// 22  STDA  Store Lower Data Address
+BOOST_AUTO_TEST_CASE(store_lower_data_address)
+{
+    Word data({6,9, 1,9,4,6, 0,6,0,0, '+'});
+    Address addr({0,1,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower({0,0, 1,9,8,8, 0,5,6,0, '-'});
+    Word distr({6,9, 1,9,5,0, 0,6,0,0, '+'});
+    Word store({6,9, 1,9,8,8, 0,6,0,0, '+'});
+
+    Opcode_Fixture f(22, distr, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), store);
+    BOOST_CHECK_EQUAL(f.upper(), upper);
+    BOOST_CHECK_EQUAL(f.lower(), lower);
+    BOOST_CHECK_EQUAL(f.drum(addr), store);
+}
+
+BOOST_AUTO_TEST_CASE(store_lower_data_address_800x)
+{
+    { Opcode_Fixture f(22, Address({2,0,0,0}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(22, Address({8,0,0,3}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(22, Address({8,0,0,1}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(22, Address({8,0,0,2}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(22, Address({8,0,0,3}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+}
+
+// 23  STDA  Store Lower Instruction Address
+BOOST_AUTO_TEST_CASE(store_lower_instruction_address)
+{
+    Word data({6,9, 1,8,0,0, 0,7,1,5, '+'});
+    Address addr({0,1,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower({0,0, 1,9,8,8, 0,8,1,6, '-'});
+    Word distr({6,9, 1,8,0,0, 0,7,5,0, '+'});
+    Word store({6,9, 1,8,0,0, 0,8,1,6, '+'});
+
+    Opcode_Fixture f(23, distr, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), store);
+    BOOST_CHECK_EQUAL(f.upper(), upper);
+    BOOST_CHECK_EQUAL(f.lower(), lower);
+    BOOST_CHECK_EQUAL(f.drum(addr), store);
+}
+
+BOOST_AUTO_TEST_CASE(store_lower_instruction_address_800x)
+{
+    { Opcode_Fixture f(23, Address({2,0,0,0}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(23, Address({8,0,0,3}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(23, Address({8,0,0,1}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(23, Address({8,0,0,2}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+    { Opcode_Fixture f(23, Address({8,0,0,3}));
+        BOOST_CHECK(f.computer.storage_selection_error()); }
+}
+
+// 17  AABL  Add Absolute to Lower
+BOOST_AUTO_TEST_CASE(add_absolute_to_lower_1)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower({9,9, 8,9,3,7, 4,6,2,7, '+'});
+    Word distr(lower);
+    Word upper_sum({0,0, 0,0,0,0, 0,0,0,1, '+'});
+    Word lower_sum({0,0, 0,1,7,2, 0,3,0,5, '+'});
+
+    Opcode_Fixture f(17, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
+    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(add_absolute_to_lower_2)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
+    Word distr(lower);
+    Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower_sum({8,9, 3,0,3,6, 5,6,8,7, '-'});
+
+    Opcode_Fixture f(17, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
+    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(add_absolute_to_lower_3)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower({9,9, 8,9,3,7, 4,6,2,7, '-'});
+    Word distr(lower);
+    Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower_sum({9,9, 7,7,0,2, 8,9,4,9, '-'});
+
+    Opcode_Fixture f(15, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
+    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+// 67  RAABL  Reset and Add Absolute into Lower
+BOOST_AUTO_TEST_CASE(reset_and_add_absolute_into_lower_1)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
+    Address addr({1,0,0,0});
+    Word upper({8,9, 4,2,7,1, 1,3,6,5, '-'});
+    Word lower({9,9, 8,9,3,7, 4,6,2,7, '-'});
+    Word distr(lower);
+    Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower_sum({0,0, 1,2,3,4, 5,6,7,8, '+'});
+
+    Opcode_Fixture f(67, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
+    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(reset_and_add_absolute_into_lower_2)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+    Address addr({1,0,0,0});
+    Word upper({8,9, 4,2,7,1, 1,3,6,5, '+'});
+    Word lower({9,9, 8,9,3,7, 4,6,2,7, '+'});
+    Word distr(lower);
+    Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower_sum({0,0, 1,2,3,4, 5,6,7,8, '+'});
+
+    Opcode_Fixture f(67, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
+    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+// 18  SABL  Subtract Absolute from Lower
+BOOST_AUTO_TEST_CASE(subtract_absolute_from_lower_1)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
+    Word distr(lower);
+    Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower_sum({8,9, 5,5,0,5, 7,0,4,3, '-'});
+
+    Opcode_Fixture f(18, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
+    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(subtract_absolute_from_lower_2)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower({8,9, 4,2,7,1, 1,3,6,5, '+'});
+    Word distr(lower);
+    Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower_sum({8,9, 3,0,3,6, 5,6,8,7, '+'});
+
+    Opcode_Fixture f(18, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
+    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(subtract_absolute_from_lower_3)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower({9,9, 8,9,3,7, 4,6,2,7, '-'});
+    Word distr(lower);
+    Word upper_sum({0,0, 0,0,0,0, 0,0,0,1, '-'});
+    Word lower_sum({0,0, 0,1,7,2, 0,3,0,5, '-'});
+
+    Opcode_Fixture f(18, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
+    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+// 68  RSABL  Reset and Subtract Absolute into Lower
+BOOST_AUTO_TEST_CASE(reset_and_subtract_absolute_into_lower_1)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+    Address addr({1,0,0,0});
+    Word upper({8,9, 4,2,7,1, 1,3,6,5, '+'});
+    Word lower({9,9, 8,9,3,7, 4,6,2,7, '+'});
+    Word distr(lower);
+    Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower_sum({0,0, 1,2,3,4, 5,6,7,8, '-'});
+
+    Opcode_Fixture f(68, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
+    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(reset_and_subtract_absolute_into_lower_2)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
+    Address addr({1,0,0,0});
+    Word upper({8,9, 4,2,7,1, 1,3,6,5, '+'});
+    Word lower({9,9, 8,9,3,7, 4,6,2,7, '+'});
+    Word distr(lower);
+    Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower_sum({0,0, 1,2,3,4, 5,6,7,8, '-'});
+
+    Opcode_Fixture f(68, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
+    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+// 19  MULT  Multiply
+BOOST_AUTO_TEST_CASE(multiply_1)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+    Address addr({1,0,0,0});
+    Word upper({8,9, 4,2,7,1, 1,3,6,5, '+'});
+    Word lower({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word distr(lower);
+    Word upper_product({0,0, 1,1,0,4, 0,3,8,3, '+'});
+    Word lower_product({4,9, 5,9,2,3, 0,4,7,0, '+'});
+
+    Opcode_Fixture f(19, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_product);
+    BOOST_CHECK_EQUAL(f.lower(), lower_product);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(multiply_2)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
+    Address addr({1,0,0,0});
+    Word upper({8,9, 4,2,7,1, 1,3,6,5, '+'});
+    Word lower({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word distr(lower);
+    Word upper_product({0,0, 1,1,0,4, 0,3,8,3, '-'});
+    Word lower_product({4,9, 5,9,2,3, 0,4,7,0, '-'});
+
+    Opcode_Fixture f(19, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_product);
+    BOOST_CHECK_EQUAL(f.lower(), lower_product);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(multiply_3)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
+    Address addr({1,0,0,0});
+    Word upper({8,9, 4,2,7,1, 1,3,6,5, '+'});
+    Word lower({0,0, 0,0,0,0, 0,1,1,1, '+'});
+    Word distr(lower);
+    Word upper_product({0,0, 1,1,0,4, 0,4,9,4, '-'});
+    Word lower_product({4,9, 5,9,2,3, 0,4,7,0, '-'});
+
+    Opcode_Fixture f(19, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_product);
+    BOOST_CHECK_EQUAL(f.lower(), lower_product);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(multiply_4)
+{
+    Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
+    Address addr({1,0,0,0});
+    Word upper({8,9, 4,2,7,1, 1,3,6,5, '+'});
+    Word lower({9,9, 9,9,9,9, 9,9,9,9, '+'});
+    Word distr(lower);
+    // Product overflows into multiplier; one extra addition is done and the most significant
+    // digit of the product (1) is shifted out.
+    Word upper_product({0,0, 1,1,0,4, 0,3,8,2, '-'});
+    Word lower_product({4,9, 7,1,5,7, 6,1,4,8, '-'});
+
+    Opcode_Fixture f(19, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), upper_product);
+    BOOST_CHECK_EQUAL(f.lower(), lower_product);
+    BOOST_CHECK( f.computer.overflow());
+}
+
+// 14  DIV  Divide
+BOOST_AUTO_TEST_CASE(divide_1)
+{
+    Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower({0,0, 0,0,0,0, 4,6,8,2, '+'});
+    Word distr(lower);
+    Word remainder({0,0, 0,0,0,0, 0,0,5,7, '+'});
+    Word quotient({0,0, 0,0,0,0, 0,0,3,7, '+'});
+
+    Opcode_Fixture f(14, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), remainder);
+    BOOST_CHECK_EQUAL(f.lower(), quotient);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(divide_2)
+{
+    Word data({0,0, 0,0,0,0, 0,1,2,5, '-'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower({0,0, 0,0,0,0, 4,6,8,2, '+'});
+    Word distr(lower);
+    Word remainder({0,0, 0,0,0,0, 0,0,5,7, '+'});
+    Word quotient({0,0, 0,0,0,0, 0,0,3,7, '-'});
+
+    Opcode_Fixture f(14, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), remainder);
+    BOOST_CHECK_EQUAL(f.lower(), quotient);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(divide_3)
+{
+    Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower({0,0, 0,0,0,0, 4,6,8,2, '-'});
+    Word distr(lower);
+    Word remainder({0,0, 0,0,0,0, 0,0,5,7, '-'});
+    Word quotient({0,0, 0,0,0,0, 0,0,3,7, '-'});
+
+    Opcode_Fixture f(14, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), remainder);
+    BOOST_CHECK_EQUAL(f.lower(), quotient);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(divide_4)
+{
+    Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,8,5,2, '+'});
+    Word lower({1,0, 3,4,0,1, 0,2,0,0, '+'});
+    Word distr(lower);
+    // The manual doesn't specify the remainder and quotient when overflow  occurs.  Here's
+    // what we currently get.
+    Word remainder({0,0, 0,0,0,0, 7,2,7,1, '+'});
+    Word quotient({0,3, 4,0,1,0, 2,0,0,9, '+'});
+
+    Opcode_Fixture f(14, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), remainder);
+    BOOST_CHECK_EQUAL(f.lower(), quotient);
+    BOOST_CHECK(f.computer.overflow());
+}
+
+// 64  DIV RU  Divide and Reset Upper
+BOOST_AUTO_TEST_CASE(divide_and_reset_upper_1)
+{
+    Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower({0,0, 0,0,0,0, 4,6,8,2, '+'});
+    Word distr(lower);
+    Word remainder({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word quotient({0,0, 0,0,0,0, 0,0,3,7, '+'});
+
+    Opcode_Fixture f(64, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), remainder);
+    BOOST_CHECK_EQUAL(f.lower(), quotient);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(divide_and_reset_upper_2)
+{
+    Word data({0,0, 0,0,0,0, 0,1,2,5, '-'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower({0,0, 0,0,0,0, 4,6,8,2, '+'});
+    Word distr(lower);
+    Word remainder({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word quotient({0,0, 0,0,0,0, 0,0,3,7, '-'});
+
+    Opcode_Fixture f(64, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), remainder);
+    BOOST_CHECK_EQUAL(f.lower(), quotient);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(divide_and_reset_upper_3)
+{
+    Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word lower({0,0, 0,0,0,0, 4,6,8,2, '-'});
+    Word distr(lower);
+    Word remainder({0,0, 0,0,0,0, 0,0,0,0, '-'});
+    Word quotient({0,0, 0,0,0,0, 0,0,3,7, '-'});
+
+    Opcode_Fixture f(64, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), remainder);
+    BOOST_CHECK_EQUAL(f.lower(), quotient);
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(divide_and_reset_upper_4)
+{
+    Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
+    Address addr({1,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,8,5,2, '+'});
+    Word lower({1,0, 3,4,0,1, 0,2,0,0, '+'});
+    Word distr(lower);
+    // The manual doesn't specify the remainder and quotient when overflow  occurs.  Here's
+    // what we currently get.
+    Word remainder({0,0, 0,0,0,0, 7,2,7,1, '+'});
+    Word quotient({0,3, 4,0,1,0, 2,0,0,9, '+'});
+
+    Opcode_Fixture f(64, data, addr, upper, lower, distr);
+    BOOST_CHECK_EQUAL(f.distributor(), data);
+    BOOST_CHECK_EQUAL(f.upper(), remainder);
+    BOOST_CHECK_EQUAL(f.lower(), quotient);
+    BOOST_CHECK(f.computer.overflow());
 }

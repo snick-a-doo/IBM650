@@ -12,7 +12,9 @@ namespace IBM650
     using TTime = int;
 
     using Address = Register<4>;
-    using Word = Signed_Register<10>;
+    constexpr std::size_t word_size = 10;
+    using UWord = Register<word_size>;
+    using Word = Signed_Register<word_size>;
 
 class Computer
 {
@@ -179,17 +181,30 @@ private:
     {
         no_operation = 00,
         stop = 01,
+
         add_to_upper = 10,
         subtract_from_upper = 11,
+        divide = 14,
         add_to_lower = 15,
         subtract_from_lower = 16,
+        add_absolute_to_lower = 17,
+        subtract_absolute_from_lower = 18,
+        multiply = 19,
+
         store_lower_in_memory = 20,
         store_upper_in_memory = 21,
+        store_lower_data_address = 22,
+        store_lower_instruction_address = 23,
         store_distributor = 24,
+
         reset_and_add_into_upper = 60,
         reset_and_subtract_into_upper = 61,
+        divide_and_reset_upper = 64,
         reset_and_add_into_lower = 65,
         reset_and_subtract_into_lower = 66,
+        reset_and_add_absolute_into_lower = 67,
+        reset_and_subtract_absolute_into_lower = 68,
+
         load_distributor = 69,
     };
     Operation m_operation;
@@ -221,7 +236,7 @@ private:
     Word m_distributor;
     Word m_upper_accumulator;
     Word m_lower_accumulator;
-    Register<10> m_program_register;
+    UWord m_program_register;
     Register<2> m_operation_register;
     Address m_address_register;
 
@@ -267,9 +282,17 @@ private:
     bool enable_distributor();
     bool data_to_distributor();
     bool distributor_to_accumulator();
+    bool multiply();
+    bool divide();
     bool remove_interlock_a();
     bool enable_position_set();
     bool store_distributor();
+
+    void add_to_accumulator(const Word& reg, bool to_upper, TDigit& carry);
+    void shift_accumulator();
+
+    int m_multiply_shift_count;
+    int m_multiply_loop_count;
 };
 }
 

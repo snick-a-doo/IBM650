@@ -33,7 +33,9 @@ Computer::Computer()
       m_storage_selection_error(false),
       m_clocking_error(false),
       m_error_sense(false),
-      m_drum_index(0)
+      m_drum_index(0),
+      m_multiply_shift_count(0),
+      m_multiply_loop_count(0)
 {
     // Define the step sequences for the types of operations.
     m_next_instruction_step = {
@@ -43,8 +45,10 @@ Computer::Computer()
         std::bind(&Computer::enable_program_register, this)
     };
 
-    m_operation_steps.resize(5);
-    m_operation_steps[1] = {
+    m_operation_steps.resize(8);
+    m_operation_steps[0] = {
+    };
+        m_operation_steps[1] = {
         std::bind(&Computer::enable_distributor, this),
         std::bind(&Computer::data_to_distributor, this)
     };
@@ -62,6 +66,22 @@ Computer::Computer()
         std::bind(&Computer::enable_distributor, this),
         std::bind(&Computer::data_to_distributor, this),
         std::bind(&Computer::store_distributor, this)
+    };
+    m_operation_steps[5] = {
+        std::bind(&Computer::data_to_distributor, this),
+        std::bind(&Computer::store_distributor, this)
+    };
+    m_operation_steps[6] = {
+        std::bind(&Computer::enable_distributor, this),
+        std::bind(&Computer::data_to_distributor, this),
+        std::bind(&Computer::multiply, this),
+        std::bind(&Computer::remove_interlock_a, this)
+    };
+    m_operation_steps[7] = {
+        std::bind(&Computer::enable_distributor, this),
+        std::bind(&Computer::data_to_distributor, this),
+        std::bind(&Computer::divide, this),
+        std::bind(&Computer::remove_interlock_a, this)
     };
 }
 
@@ -209,16 +229,28 @@ std::size_t Computer::operation_index(Operation op) const
     case Operation::subtract_from_upper:
     case Operation::add_to_lower:
     case Operation::subtract_from_lower:
+    case Operation::add_absolute_to_lower:
+    case Operation::subtract_absolute_from_lower:
     case Operation::reset_and_add_into_upper:
     case Operation::reset_and_subtract_into_upper:
     case Operation::reset_and_add_into_lower:
     case Operation::reset_and_subtract_into_lower:
+    case Operation::reset_and_add_absolute_into_lower:
+    case Operation::reset_and_subtract_absolute_into_lower:
         return 2;
     case Operation::store_distributor:
         return 3;
     case Operation::store_lower_in_memory:
     case Operation::store_upper_in_memory:
         return 4;
+    case Operation::store_lower_data_address:
+    case Operation::store_lower_instruction_address:
+        return 5;
+    case Operation::multiply:
+        return 6;
+    case Operation::divide:
+    case Operation::divide_and_reset_upper:
+        return 7;
     }
 }
 
@@ -278,8 +310,7 @@ void Computer::program_start()
             auto inst_end = m_next_instruction_step.end();
             // The operation sequence and the next address sequence may happen in parallel.
             // Loop until both are done.
-            for (auto op_it = op_seq.begin();
-                 op_it != op_end || m_next_op_it != inst_end; )
+            for (auto op_it = op_seq.begin(); op_it != op_end || m_next_op_it != inst_end; )
             {
                 if (op_it != op_end)
                     if ((*op_it)())
@@ -472,6 +503,8 @@ bool Computer::instruction_to_program_register()
 
 bool Computer::op_and_address_to_registers()
 {
+    //! Absorb instruction_address_to_address_register().  Condition setting the address
+    //! register for branch instructions.
     m_operation_register.load(m_program_register, 0, 0);
     m_address_register.load(m_program_register, 2, 0);
     std::cerr << m_run_time << " Op and DA to reg: Op=" << m_operation_register
@@ -483,6 +516,7 @@ bool Computer::op_and_address_to_registers()
 
 bool Computer::instruction_address_to_address_register()
 {
+    //! Do within op_and_address_to_registers().
     m_address_register.load(m_program_register, 6, 0);
     std::cerr << m_run_time << " IA to R: IA=" << m_address_register << std::endl;
 
@@ -508,18 +542,56 @@ bool Computer::data_to_distributor()
     std::cerr << m_run_time << " data to dist: addr=" << m_address_register
               << " drum=" << m_drum_index << std::endl;
 
-    auto addr = m_address_register;
-    if (m_operation == Operation::store_lower_in_memory)
-        addr = lower_accumulator_address;
-    else if (m_operation == Operation::store_upper_in_memory)
-        addr = upper_accumulator_address;
-    if (addr.value() >= storage_entry_address.value() || m_drum_index == addr.value() % 50)
+    Address addr;
+    switch (m_operation)
     {
-        m_distributor = get_storage(addr);
+    case Operation::store_lower_in_memory:
+        m_distributor = m_lower_accumulator;
+        return true;
+    case Operation::store_lower_data_address:
+        addr.load(m_lower_accumulator, 2, 0);
+        m_distributor.load(addr, 0, 2);
+        return true;
+    case Operation::store_lower_instruction_address:
+        addr.load(m_lower_accumulator, 6, 0);
+        m_distributor.load(addr, 0, 6);
+        return true;
+    case Operation::store_upper_in_memory:
+        m_distributor = m_upper_accumulator;
+        return true;
+    }
+
+    if (m_drum_index == m_address_register.value() % 50)
+    {
+        m_distributor = get_storage(m_address_register);
         std::cerr << "data to dist: dist=" << m_distributor << std::endl;
         return true;
     }
     return false;
+}
+
+// The manual says the upper sign is affected by reset, multiplying and, dividing.  Addition
+// and subtraction are not in that list, but it's not clear if the upper sign should be
+// considered when adding to upper.  It's easiest to ignore (but preserve) the upper sign and
+// treat the accumulator as one big register with the sign of the lower.  This strategy avoids
+// the need for special cases for carrying and complementing, and gives the same answers as the
+// examples in the manual.
+void Computer::add_to_accumulator(const Word& reg, bool to_upper, TDigit& carry)
+{
+    // Make 20-digit registers for the accumulator and the argument.  Take the sign of the
+    // lower accumulator.
+    Signed_Register<20> accum;
+    accum.load(m_upper_accumulator, 0, 0);
+    accum.load(m_lower_accumulator, 0, word_size);
+    Signed_Register<20> rhs;
+    rhs.fill(0, '+');
+    rhs.load(reg, 0, word_size);
+    accum = add(accum, shift(rhs, to_upper ? word_size : 0), carry);
+    // Copy the upper and lower parts of the sums to the registers, preserving the upper sign.
+    TDigit upper_sign = m_upper_accumulator.digits().back();
+    m_upper_accumulator.load(accum, 0, 0);
+    m_upper_accumulator.digits().back() = upper_sign;
+    m_lower_accumulator.load(accum, word_size, 0);
 }
 
 bool Computer::distributor_to_accumulator()
@@ -539,41 +611,25 @@ bool Computer::distributor_to_accumulator()
 
     TDigit carry = 0;
 
-    // The manual says the upper sign is affected by reset, multiplying and dividing.
-    // Presumably addition should treat the upper and lower signs as independent, but this gets
-    // messy when carrying and complementing are needed.  It's easier to treat the accumulator
-    // as one big register with the sign of the lower and give the upper the sign of the
-    // result.  This strategy give the same answers as the examples in the manual.
-    auto add_accum = [&carry](Word& upper, Word& lower, const Word& reg, bool to_upper) {
-        // Make 20-digit registers for the accumulator and the argument.  Take the sign of the
-        // lower accumulator.
-        Signed_Register<20> accum;
-        accum.load(upper, 0, 0);
-        accum.load(lower, 0, 10);
-        Signed_Register<20> rhs;
-        rhs.fill(0, '+');
-        rhs.load(reg, 0, 10);
-        accum = add(accum, shift(rhs, to_upper ? 10 : 0), carry);
-        // Copy the upper and lower parts of the sums to the registers.  Copy the sign of the
-        // sum to both.
-        upper.load(accum, 0, 0);
-        upper.digits().back() = bin(accum.sign());
-        lower.load(accum, 10, 0);
-    };
-
     switch (m_operation)
     {
     case Operation::add_to_upper:
-        add_accum(m_upper_accumulator, m_lower_accumulator, m_distributor, true);
+        add_to_accumulator(m_distributor, true, carry);
         break;
     case Operation::subtract_from_upper:
-        add_accum(m_upper_accumulator, m_lower_accumulator, change_sign(m_distributor), true);
+        add_to_accumulator(change_sign(m_distributor), true, carry);
         break;
     case Operation::add_to_lower:
-        add_accum(m_upper_accumulator, m_lower_accumulator, m_distributor, false);
+        add_to_accumulator(m_distributor, false, carry);
         break;
     case Operation::subtract_from_lower:
-        add_accum(m_upper_accumulator, m_lower_accumulator, change_sign(m_distributor), false);
+        add_to_accumulator(change_sign(m_distributor), false, carry);
+        break;
+    case Operation::add_absolute_to_lower:
+        add_to_accumulator(abs(m_distributor), false, carry);
+        break;
+    case Operation::subtract_absolute_from_lower:
+        add_to_accumulator(change_sign(abs(m_distributor)), false, carry);
         break;
     case Operation::reset_and_add_into_upper:
         m_upper_accumulator = m_distributor;
@@ -591,10 +647,121 @@ bool Computer::distributor_to_accumulator()
         m_lower_accumulator = change_sign(m_distributor);
         m_upper_accumulator.fill(0, m_lower_accumulator.sign());
         break;
+    case Operation::reset_and_add_absolute_into_lower:
+        m_lower_accumulator = abs(m_distributor);
+        m_upper_accumulator.fill(0, m_lower_accumulator.sign());
+        break;
+    case Operation::reset_and_subtract_absolute_into_lower:
+        m_lower_accumulator = change_sign(abs(m_distributor));
+        m_upper_accumulator.fill(0, m_lower_accumulator.sign());
+        break;
     default:
         assert(false);
     }
     m_overflow = carry > 0;
+    return true;
+}
+
+void Computer::shift_accumulator()
+{
+    Signed_Register<2*word_size> accum;
+    accum.load(m_upper_accumulator, 0, 0);
+    accum.load(m_lower_accumulator, 0, word_size);
+    accum = shift(accum, 1);
+    TDigit sign = m_upper_accumulator.digits().back();
+    m_upper_accumulator.load(accum, 0, 0);
+    m_upper_accumulator.digits().back() = sign;
+    m_lower_accumulator.load(accum, word_size, 0);
+}
+
+bool Computer::multiply()
+{
+    // Match the accumulator sign to the distributor so that the absolute value of the lower
+    // adds to the absolute value of the product, i.e the value in lower makes the product more
+    // positive if the product is positive, and more negative if it's negative.
+    if (m_multiply_shift_count == 0 && m_multiply_loop_count == 0)
+    {
+        m_upper_accumulator.digits().back() = m_distributor.digits().back();
+        m_lower_accumulator.digits().back() = m_distributor.digits().back();
+    }
+
+    if (m_multiply_loop_count == 0)
+    {
+        // Record the high digit and shift left.
+        m_multiply_loop_count = dec(m_upper_accumulator.digits().front());
+        shift_accumulator();
+        ++m_multiply_shift_count;
+        return false;
+    }
+
+    // Add the distributor until the loop count gets to 0.
+    TDigit carry = 0;
+    // Signal overflow if the product overflows its 10 digit and changes the units digit of the
+    // multiplier.
+    std::size_t multiplier_index = word_size - 1 - m_multiply_shift_count;
+    TDigit multiplier_units = m_upper_accumulator.digits()[multiplier_index];
+    add_to_accumulator(m_distributor, false, carry);
+    m_overflow = m_overflow || m_upper_accumulator.digits()[multiplier_index] != multiplier_units;
+    --m_multiply_loop_count;
+    if (m_multiply_loop_count > 0 || m_multiply_shift_count < word_size)
+        return false;
+
+    // Reset the shift count for the next multiplication.
+    m_multiply_shift_count = 0;
+    return true;
+}
+
+bool Computer::divide()
+{
+    if (m_multiply_shift_count == 0 && m_multiply_loop_count == 0)
+        m_lower_accumulator.digits().back()
+            = bin(m_distributor.sign() == m_lower_accumulator.sign() ? '+' : '-');
+
+    if (m_multiply_loop_count == 0)
+    {
+        // Record the high digit and shift left.
+        m_multiply_loop_count = 1 + dec(m_upper_accumulator.digits().front());
+        shift_accumulator();
+        ++m_multiply_shift_count;
+        return false;
+    }
+
+    // Subtract the distributor until the sign changes.
+    TDigit carry = 0;
+    Signed_Register<11> a;
+    a.digits().front() = m_multiply_loop_count - 1;
+    a.load(abs(m_upper_accumulator), 0, 1);
+    Signed_Register<11> b;
+    b.digits().front() = 0;
+    b.load(abs(m_distributor), 0, 1);
+    a = add(a, change_sign(b), carry);
+    if (a.sign() == '+')
+    {
+        TDigit sign = m_upper_accumulator.digits().back();
+        m_upper_accumulator.load(a, 1, 0);
+        m_upper_accumulator.digits().back() = sign;
+        TDigit ones = dec(m_lower_accumulator.digits()[word_size-1]);
+        if (ones == 9)
+        {
+            //! The machine should stop unconditionally on quotient overflow.
+            m_overflow = true;
+            return true;
+        }
+        m_lower_accumulator.digits()[word_size-1] = bin(ones + 1);
+        return false;
+    }
+
+    m_multiply_loop_count = 0;
+    a = add(a, b, carry);
+
+    if (m_multiply_shift_count < word_size)
+        return false;
+
+    if (m_operation == Operation::divide_and_reset_upper)
+        m_upper_accumulator.fill(0, m_lower_accumulator.sign());
+
+    // Reset the shift count for the next multiplication.
+    m_multiply_shift_count = 0;
     return true;
 }
 
