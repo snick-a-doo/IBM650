@@ -580,17 +580,17 @@ void Computer::add_to_accumulator(const Word& reg, bool to_upper, TDigit& carry)
 {
     // Make 20-digit registers for the accumulator and the argument.  Take the sign of the
     // lower accumulator.
-    Signed_Register<20> accum;
+    Signed_Register<2*word_size> accum;
     accum.load(m_upper_accumulator, 0, 0);
     accum.load(m_lower_accumulator, 0, word_size);
-    Signed_Register<20> rhs;
+    Signed_Register<2*word_size> rhs;
     rhs.fill(0, '+');
     rhs.load(reg, 0, word_size);
     accum = add(accum, shift(rhs, to_upper ? word_size : 0), carry);
     // Copy the upper and lower parts of the sums to the registers, preserving the upper sign.
-    TDigit upper_sign = m_upper_accumulator.digits().back();
+    TDigit upper_sign = m_upper_accumulator[0];
     m_upper_accumulator.load(accum, 0, 0);
-    m_upper_accumulator.digits().back() = upper_sign;
+    m_upper_accumulator[0] = upper_sign;
     m_lower_accumulator.load(accum, word_size, 0);
 }
 
@@ -668,9 +668,9 @@ void Computer::shift_accumulator()
     accum.load(m_upper_accumulator, 0, 0);
     accum.load(m_lower_accumulator, 0, word_size);
     accum = shift(accum, 1);
-    TDigit sign = m_upper_accumulator.digits().back();
+    TDigit sign = m_upper_accumulator[0];
     m_upper_accumulator.load(accum, 0, 0);
-    m_upper_accumulator.digits().back() = sign;
+    m_upper_accumulator[0] = sign;
     m_lower_accumulator.load(accum, word_size, 0);
 }
 
@@ -681,14 +681,14 @@ bool Computer::multiply()
     // positive if the product is positive, and more negative if it's negative.
     if (m_multiply_shift_count == 0 && m_multiply_loop_count == 0)
     {
-        m_upper_accumulator.digits().back() = m_distributor.digits().back();
-        m_lower_accumulator.digits().back() = m_distributor.digits().back();
+        m_upper_accumulator[0] = m_distributor[0];
+        m_lower_accumulator[0] = m_distributor[0];
     }
 
     if (m_multiply_loop_count == 0)
     {
         // Record the high digit and shift left.
-        m_multiply_loop_count = dec(m_upper_accumulator.digits().front());
+        m_multiply_loop_count = dec(m_upper_accumulator[word_size]);
         shift_accumulator();
         ++m_multiply_shift_count;
         return false;
@@ -698,10 +698,9 @@ bool Computer::multiply()
     TDigit carry = 0;
     // Signal overflow if the product overflows its 10 digit and changes the units digit of the
     // multiplier.
-    std::size_t multiplier_index = word_size - 1 - m_multiply_shift_count;
-    TDigit multiplier_units = m_upper_accumulator.digits()[multiplier_index];
+    TDigit multiplier_units = m_upper_accumulator[m_multiply_shift_count+1];
     add_to_accumulator(m_distributor, false, carry);
-    m_overflow = m_overflow || m_upper_accumulator.digits()[multiplier_index] != multiplier_units;
+    m_overflow = m_overflow || m_upper_accumulator[m_multiply_shift_count+1] != multiplier_units;
     --m_multiply_loop_count;
     if (m_multiply_loop_count > 0 || m_multiply_shift_count < word_size)
         return false;
@@ -714,13 +713,13 @@ bool Computer::multiply()
 bool Computer::divide()
 {
     if (m_multiply_shift_count == 0 && m_multiply_loop_count == 0)
-        m_lower_accumulator.digits().back()
+        m_lower_accumulator[0]
             = bin(m_distributor.sign() == m_lower_accumulator.sign() ? '+' : '-');
 
     if (m_multiply_loop_count == 0)
     {
         // Record the high digit and shift left.
-        m_multiply_loop_count = 1 + dec(m_upper_accumulator.digits().front());
+        m_multiply_loop_count = 1 + dec(m_upper_accumulator[word_size]);
         shift_accumulator();
         ++m_multiply_shift_count;
         return false;
@@ -728,26 +727,26 @@ bool Computer::divide()
 
     // Subtract the distributor until the sign changes.
     TDigit carry = 0;
-    Signed_Register<11> a;
-    a.digits().front() = m_multiply_loop_count - 1;
+    Signed_Register<word_size+1> a;
+    a[word_size+1] = m_multiply_loop_count - 1;
     a.load(abs(m_upper_accumulator), 0, 1);
-    Signed_Register<11> b;
-    b.digits().front() = 0;
+    Signed_Register<word_size+1> b;
+    b[word_size+1] = 0;
     b.load(abs(m_distributor), 0, 1);
     a = add(a, change_sign(b), carry);
     if (a.sign() == '+')
     {
-        TDigit sign = m_upper_accumulator.digits().back();
+        TDigit sign = m_upper_accumulator[0];
         m_upper_accumulator.load(a, 1, 0);
-        m_upper_accumulator.digits().back() = sign;
-        TDigit ones = dec(m_lower_accumulator.digits()[word_size-1]);
+        m_upper_accumulator[0] = sign;
+        TDigit ones = dec(m_lower_accumulator[1]);
         if (ones == 9)
         {
             //! The machine should stop unconditionally on quotient overflow.
             m_overflow = true;
             return true;
         }
-        m_lower_accumulator.digits()[word_size-1] = bin(ones + 1);
+        m_lower_accumulator[1] = bin(ones + 1);
         return false;
     }
 

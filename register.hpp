@@ -62,6 +62,10 @@ namespace IBM650
         /// @Return true if any digits of reg differ.
         bool operator!=(const Register<N>& reg) const;
 
+        /// @Return the code for the nth most significant digit.
+        virtual TDigit& operator[](std::size_t n);
+        virtual const TDigit& operator[](std::size_t n) const;
+
     private:
         /// The contents of the register as bi-quinary codes.
         std::array<TDigit, N> m_digits;
@@ -165,6 +169,20 @@ namespace IBM650
         return !(m_digits == reg.m_digits);
     }
 
+    template <std::size_t N>
+    TDigit& Register<N>::operator[](std::size_t n)
+    {
+        assert(0 < n <= N);
+        return m_digits[N-n];
+    }
+
+    template <std::size_t N>
+    const TDigit& Register<N>::operator[](std::size_t n) const
+    {
+        assert(0 < n <= N);
+        return m_digits[N-n];
+    }
+
     /// A register with an extra digit to represent the sign.
     template <std::size_t N>
     class Signed_Register : public Register<N+1>
@@ -182,7 +200,10 @@ namespace IBM650
         /// Set the digits to the passed-in integer.  Set the sign to the passed-in sign.
         void fill(TDigit digit, TDigit sign);
 
+        /// @Return the sign as a character: +, -, _, or ?.
         TDigit sign() const;
+        virtual TDigit& operator[](std::size_t n) override;
+        virtual const TDigit& operator[](std::size_t n) const override;
     };
 
     template <std::size_t N>
@@ -221,6 +242,19 @@ namespace IBM650
     }
 
     template <std::size_t N>
+    TDigit& Signed_Register<N>::operator[](std::size_t n)
+    {
+        return Register<N+1>::digits()[N-n];
+    }
+
+    template <std::size_t N>
+    const TDigit& Signed_Register<N>::operator[](std::size_t n) const
+    {
+        assert(0 <= n <= N);
+        return Register<N+1>::digits()[N-n];
+    }
+
+    template <std::size_t N>
     Signed_Register<N> shift(const Signed_Register<N>& reg, std::size_t left)
     {
         Signed_Register<N> out(reg);
@@ -236,7 +270,7 @@ namespace IBM650
     Signed_Register<N> abs(const Signed_Register<N>& reg)
     {
         Signed_Register<N> out(reg);
-        out.digits().back() = bin('+');
+        out[0] = bin('+');
         return out;
     }
 
@@ -244,7 +278,7 @@ namespace IBM650
     Signed_Register<N> change_sign(const Signed_Register<N>& reg)
     {
         Signed_Register<N> out(reg);
-        out.digits().back() = out.sign() == '+' ? bin('-') : bin('+');
+        out[0] = out.sign() == '+' ? bin('-') : bin('+');
         return out;
     }
 
@@ -259,16 +293,15 @@ namespace IBM650
         auto sub = [&carry, &sum](const auto& subl, const auto& subr)
         {
             carry = 0;
-            for (std::size_t i = 0; i < N; ++i)
+            for (std::size_t i = 1; i <= N; ++i)
             {
-                auto place = N - i - 1;
-                auto l = dec(subl.digits()[place]);
-                auto r = dec(subr.digits()[place]) + carry;
+                auto l = dec(subl[i]);
+                auto r = dec(subr[i]) + carry;
                 carry = 0;
-                sum[place] = l - r;
+                sum[N-i] = l - r;
                 if (l < r)
                 {
-                    sum[place] += 10;
+                    sum[N-i] += 10;
                     carry = 1;
                 }
             }
@@ -276,11 +309,10 @@ namespace IBM650
 
         if (lhs.sign() == rhs.sign())
         {
-            for (std::size_t i = 0; i < N; ++i)
+            for (std::size_t i = 1; i <= N; ++i)
             {
-                auto place = N - i - 1;
-                auto digit = carry + dec(lhs.digits()[place]) + dec(rhs.digits()[place]);
-                sum[place] = digit % 10;
+                auto digit = carry + dec(lhs[i]) + dec(rhs[i]);
+                sum[N-i] = digit % 10;
                 carry = digit/10;
             }
             sum[N] = lhs.sign();
