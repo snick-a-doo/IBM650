@@ -17,6 +17,303 @@ namespace
     const Address upper_accumulator_address({8,0,0,3});
 }
 
+namespace IBM650
+{
+#define OPERATION_STEP(name, body) \
+class name : public Operation_Step { \
+public: \
+    name(Computer& computer) : Operation_Step(computer) {}; \
+    virtual bool execute(Computer::Operation op) override body \
+};
+
+class Operation_Step
+{
+public:
+    Operation_Step(Computer& computer) : c(computer) {};
+    virtual bool execute(Computer::Operation op) { return true; }
+protected:
+    Computer& c;
+};
+
+OPERATION_STEP(Instruction_to_Program_Register,
+{
+    std::cerr << "I to P addr:=" << c.m_address_register << std::endl;
+    TValue addr = c.m_address_register.value();
+    if (addr >= 8000 || c.m_drum_index == addr % 50)
+    {
+        c.m_program_register.load(c.get_storage(c.m_address_register), 0, 0);
+        std::cerr << "I to PR: PR=" << c.m_program_register << std::endl;
+        return true;
+    }
+    return false;
+})
+
+OPERATION_STEP(Op_and_Address_to_Registers,
+{
+    //! Absorb instruction_address_to_address_register().  Condition setting the address
+    //! register for branch instructions.
+    c.m_operation_register.load(c.m_program_register, 0, 0);
+    c.m_address_register.load(c.m_program_register, 2, 0);
+    std::cerr << c.m_run_time << " Op and DA to reg: Op=" << c.m_operation_register
+              << " DA=" << c.m_address_register << std::endl;
+
+    c.m_half_cycle = c.Half_Cycle::data;
+    return true;
+})
+
+OPERATION_STEP(Instruction_Address_to_Address_Register,
+{
+    //! Do within op_and_address_to_registers().
+    c.m_address_register.load(c.m_program_register, 6, 0);
+    std::cerr << c.m_run_time << " IA to R: IA=" << c.m_address_register << std::endl;
+
+    c.m_half_cycle = c.Half_Cycle::instruction;
+    return true;
+})
+
+OPERATION_STEP(Enable_Program_Register,
+{
+    std::cerr << "enable PR\n";
+    return true;
+})
+
+OPERATION_STEP(Enable_Distributor, { return true; });
+
+OPERATION_STEP(Data_to_Distributor,
+{
+    Address addr;
+    switch (op)
+    {
+    case Computer::Operation::store_lower_in_memory:
+        c.m_distributor = c.m_lower_accumulator;
+        return true;
+    case Computer::Operation::store_lower_data_address:
+        addr.load(c.m_lower_accumulator, 2, 0);
+        c.m_distributor.load(addr, 0, 2);
+        return true;
+    case Computer::Operation::store_lower_instruction_address:
+        addr.load(c.m_lower_accumulator, 6, 0);
+        c.m_distributor.load(addr, 0, 6);
+        return true;
+    case Computer::Operation::store_upper_in_memory:
+        c.m_distributor = c.m_upper_accumulator;
+        return true;
+    }
+
+    if (c.m_drum_index == c.m_address_register.value() % 50)
+    {
+        c.m_distributor = c.get_storage(c.m_address_register);
+        return true;
+    }
+    return false;
+})
+
+OPERATION_STEP(Distributor_to_Accumulator,
+{
+    std::cerr << c.m_run_time << " Dist to Acc: Dist=" << c.m_distributor << std::endl;
+
+    // Wait for even time
+    if (!c.m_restart && c.m_run_time % 2 != 0)
+        return false;
+
+    // Start looking for next instruction.
+    c.m_restart = true;
+
+    // It takes 2 cycles to fill the accumulator and we start on an even time.
+    if (c.m_run_time % 2 == 0)
+        return false;
+
+    TDigit carry = 0;
+
+    switch (c.m_operation)
+    {
+    case Computer::Operation::add_to_upper:
+        c.add_to_accumulator(c.m_distributor, true, carry);
+        break;
+    case Computer::Operation::subtract_from_upper:
+        c.add_to_accumulator(change_sign(c.m_distributor), true, carry);
+        break;
+    case Computer::Operation::add_to_lower:
+        c.add_to_accumulator(c.m_distributor, false, carry);
+        break;
+    case Computer::Operation::subtract_from_lower:
+        c.add_to_accumulator(change_sign(c.m_distributor), false, carry);
+        break;
+    case Computer::Operation::add_absolute_to_lower:
+        c.add_to_accumulator(abs(c.m_distributor), false, carry);
+        break;
+    case Computer::Operation::subtract_absolute_from_lower:
+        c.add_to_accumulator(change_sign(abs(c.m_distributor)), false, carry);
+        break;
+    case Computer::Operation::reset_and_add_into_upper:
+        c.m_upper_accumulator = c.m_distributor;
+        c.m_lower_accumulator.fill(0, c.m_upper_accumulator.sign());
+        break;
+    case Computer::Operation::reset_and_subtract_into_upper:
+        c.m_upper_accumulator = change_sign(c.m_distributor);
+        c.m_lower_accumulator.fill(0, c.m_upper_accumulator.sign());
+        break;
+    case Computer::Operation::reset_and_add_into_lower:
+        c.m_lower_accumulator = c.m_distributor;
+        c.m_upper_accumulator.fill(0, c.m_lower_accumulator.sign());
+        break;
+    case Computer::Operation::reset_and_subtract_into_lower:
+        c.m_lower_accumulator = change_sign(c.m_distributor);
+        c.m_upper_accumulator.fill(0, c.m_lower_accumulator.sign());
+        break;
+    case Computer::Operation::reset_and_add_absolute_into_lower:
+        c.m_lower_accumulator = abs(c.m_distributor);
+        c.m_upper_accumulator.fill(0, c.m_lower_accumulator.sign());
+        break;
+    case Computer::Operation::reset_and_subtract_absolute_into_lower:
+        c.m_lower_accumulator = change_sign(abs(c.m_distributor));
+        c.m_upper_accumulator.fill(0, c.m_lower_accumulator.sign());
+        break;
+    default:
+        assert(false);
+    }
+    c.m_overflow = carry > 0;
+    return true;
+})
+
+OPERATION_STEP(Remove_Interlock_A,
+{
+    std::cerr << c.m_run_time << " remove interlock A\n";
+    c.m_restart = false;
+    return true;
+})
+
+OPERATION_STEP(Enable_Position_Set, { return true; })
+
+OPERATION_STEP(Store_Distributor,
+{
+    std::cerr << c.m_run_time << " store dist: addr=" << c.m_address_register
+              << " dist=" << c.m_distributor << std::endl;
+
+    auto addr = c.m_address_register.value();
+    if (addr >= c.m_drum_capacity)
+    {
+        c.m_storage_selection_error = true;
+        return true;
+    }
+    if (c.m_drum_index == addr % 50)
+    {
+        c.set_storage(c.m_address_register, c.m_distributor);
+        return true;
+    }
+    return false;
+})
+
+class Multiply : public Operation_Step
+{
+public:
+    Multiply(Computer& computer) : Operation_Step(computer) {}
+
+    virtual bool execute(Computer::Operation op) override {
+        // Match the accumulator sign to the distributor so that the absolute value of the lower
+        // adds to the absolute value of the product, i.e the value in lower makes the product more
+        // positive if the product is positive, and more negative if it's negative.
+        if (m_shift_count == 0 && m_upper_overflow == 0)
+        {
+            c.m_upper_accumulator[0] = c.m_distributor[0];
+            c.m_lower_accumulator[0] = c.m_distributor[0];
+        }
+
+        if (m_upper_overflow == 0)
+        {
+            // Record the high digit and shift left.
+            m_upper_overflow = dec(c.m_upper_accumulator[word_size]);
+            c.shift_accumulator();
+            ++m_shift_count;
+            return false;
+        }
+
+        // Add the distributor until the loop count gets to 0.
+        TDigit carry = 0;
+        // Signal overflow if the product overflows its 10 digits and changes the units digit of
+        // the multiplier.
+        TDigit multiplier_units = c.m_upper_accumulator[m_shift_count+1];
+        c.add_to_accumulator(c.m_distributor, false, carry);
+        c.m_overflow = c.m_overflow || c.m_upper_accumulator[m_shift_count+1] != multiplier_units;
+        --m_upper_overflow;
+        if (m_upper_overflow > 0 || m_shift_count < word_size)
+            return false;
+
+        // Reset the shift count for the next multiplication.
+        m_shift_count = 0;
+        return true;
+    }
+private:
+    TDigit m_upper_overflow = 0;
+    std::size_t m_shift_count = 0;
+};
+
+class Divide : public Operation_Step
+{
+public:
+    Divide(Computer& computer) : Operation_Step(computer) {}
+
+    virtual bool execute(Computer::Operation op) override {
+        if (m_shift_count == 0 && m_upper_overflow == 0)
+            c.m_lower_accumulator[0]
+                = bin(c.m_distributor.sign() == c.m_lower_accumulator.sign() ? '+' : '-');
+
+        if (m_shift)
+        {
+            // Record the high digit and shift left.
+            m_upper_overflow = dec(c.m_upper_accumulator[word_size]);
+            c.shift_accumulator();
+            ++m_shift_count;
+            m_shift = false;
+            return false;
+        }
+
+        // Subtract the distributor until the sign changes.
+        TDigit carry = 0;
+        Signed_Register<word_size+1> a;
+        a[word_size+1] = m_upper_overflow;
+        a.load(abs(c.m_upper_accumulator), 0, 1);
+        Signed_Register<word_size+1> b;
+        b[word_size+1] = 0;
+        b.load(abs(c.m_distributor), 0, 1);
+        a = add(a, change_sign(b), carry);
+        if (a.sign() == '+')
+        {
+            TDigit sign = c.m_upper_accumulator[0];
+            c.m_upper_accumulator.load(a, 1, 0);
+            c.m_upper_accumulator[0] = sign;
+            TDigit ones = dec(c.m_lower_accumulator[1]);
+            if (ones == 9)
+            {
+                //! The machine should stop unconditionally on quotient overflow.
+                c.m_overflow = true;
+                m_shift_count = 0;
+                return true;
+            }
+            c.m_lower_accumulator[1] = bin(ones + 1);
+            return false;
+        }
+
+        m_shift = true;
+        a = add(a, b, carry);
+
+        if (m_shift_count < word_size)
+            return false;
+
+        if (c.m_operation == Computer::Operation::divide_and_reset_upper)
+            c.m_upper_accumulator.fill(0, c.m_lower_accumulator.sign());
+
+        // Reset the shift count for the next division.
+        m_shift_count = 0;
+        return true;
+    }
+private:
+    TDigit m_upper_overflow = 0;
+    std::size_t m_shift_count = 0;
+    bool m_shift = true;
+};
+}
+
 /// The initial state is: powered off for long enough that the blower is off.
 Computer::Computer()
     : m_elapsed_seconds(blower_off_delay_seconds),
@@ -33,55 +330,13 @@ Computer::Computer()
       m_storage_selection_error(false),
       m_clocking_error(false),
       m_error_sense(false),
-      m_drum_index(0),
-      m_multiply_shift_count(0),
-      m_multiply_loop_count(0)
+      m_drum_index(0)
 {
-    // Define the step sequences for the types of operations.
-    m_next_instruction_step = {
-        std::bind(&Computer::instruction_to_program_register, this),
-        std::bind(&Computer::op_and_address_to_registers, this),
-        std::bind(&Computer::instruction_address_to_address_register, this),
-        std::bind(&Computer::enable_program_register, this)
-    };
-
-    m_operation_steps.resize(8);
-    m_operation_steps[0] = {
-    };
-        m_operation_steps[1] = {
-        std::bind(&Computer::enable_distributor, this),
-        std::bind(&Computer::data_to_distributor, this)
-    };
-    m_operation_steps[2] = {
-        std::bind(&Computer::enable_distributor, this),
-        std::bind(&Computer::data_to_distributor, this),
-        std::bind(&Computer::distributor_to_accumulator, this),
-        std::bind(&Computer::remove_interlock_a, this)
-    };
-    m_operation_steps[3] = {
-        std::bind(&Computer::enable_position_set, this),
-        std::bind(&Computer::store_distributor, this)
-    };
-    m_operation_steps[4] = {
-        std::bind(&Computer::enable_distributor, this),
-        std::bind(&Computer::data_to_distributor, this),
-        std::bind(&Computer::store_distributor, this)
-    };
-    m_operation_steps[5] = {
-        std::bind(&Computer::data_to_distributor, this),
-        std::bind(&Computer::store_distributor, this)
-    };
-    m_operation_steps[6] = {
-        std::bind(&Computer::enable_distributor, this),
-        std::bind(&Computer::data_to_distributor, this),
-        std::bind(&Computer::multiply, this),
-        std::bind(&Computer::remove_interlock_a, this)
-    };
-    m_operation_steps[7] = {
-        std::bind(&Computer::enable_distributor, this),
-        std::bind(&Computer::data_to_distributor, this),
-        std::bind(&Computer::divide, this),
-        std::bind(&Computer::remove_interlock_a, this)
+    m_next_instruction_steps = {
+        std::make_shared<Instruction_to_Program_Register>(*this),
+        std::make_shared<Op_and_Address_to_Registers>(*this),
+        std::make_shared<Instruction_Address_to_Address_Register>(*this),
+        std::make_shared<Enable_Program_Register>(*this)
     };
 }
 
@@ -216,15 +471,18 @@ void Computer::transfer()
         m_address_register = m_address_entry;
 }
 
-std::size_t Computer::operation_index(Operation op) const
+Computer::Op_Sequence Computer::operation_steps(Operation op)
 {
+    Op_Sequence steps;
     switch (op)
     {
     case Operation::no_operation:
     case Operation::stop:
-        return 0;
+        break;
     case Operation::load_distributor:
-        return 1;
+        steps.push_back(std::make_shared<Enable_Distributor>(*this));
+        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
+        break;
     case Operation::add_to_upper:
     case Operation::subtract_from_upper:
     case Operation::add_to_lower:
@@ -237,21 +495,41 @@ std::size_t Computer::operation_index(Operation op) const
     case Operation::reset_and_subtract_into_lower:
     case Operation::reset_and_add_absolute_into_lower:
     case Operation::reset_and_subtract_absolute_into_lower:
-        return 2;
+        steps.push_back(std::make_shared<Enable_Distributor>(*this));
+        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
+        steps.push_back(std::make_shared<Distributor_to_Accumulator>(*this));
+        steps.push_back(std::make_shared<Remove_Interlock_A>(*this));
+        break;
     case Operation::store_distributor:
-        return 3;
+        steps.push_back(std::make_shared<Enable_Position_Set>(*this));
+        steps.push_back(std::make_shared<Store_Distributor>(*this));
+        break;
     case Operation::store_lower_in_memory:
     case Operation::store_upper_in_memory:
-        return 4;
+        steps.push_back(std::make_shared<Enable_Distributor>(*this));
+        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
+        steps.push_back(std::make_shared<Store_Distributor>(*this));
+        break;
     case Operation::store_lower_data_address:
     case Operation::store_lower_instruction_address:
-        return 5;
+        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
+        steps.push_back(std::make_shared<Store_Distributor>(*this));
+        break;
     case Operation::multiply:
-        return 6;
+        steps.push_back(std::make_shared<Enable_Distributor>(*this));
+        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
+        steps.push_back(std::make_shared<Multiply>(*this));
+        steps.push_back(std::make_shared<Remove_Interlock_A>(*this));
+        break;
     case Operation::divide:
     case Operation::divide_and_reset_upper:
-        return 7;
+        steps.push_back(std::make_shared<Enable_Distributor>(*this));
+        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
+        steps.push_back(std::make_shared<Divide>(*this));
+        steps.push_back(std::make_shared<Remove_Interlock_A>(*this));
+        break;
     }
+    return steps;
 }
 
 void Computer::program_start()
@@ -285,11 +563,11 @@ void Computer::program_start()
         {
             std::cerr << "I\n";
             // Load the data address.
-            for (m_next_op_it = m_next_instruction_step.begin();
+            for (m_next_op_it = m_next_instruction_steps.begin();
                  m_half_cycle == Half_Cycle::instruction; )
             {
                 // Execute the operation.  Go on to the next operation if this one is done.
-                if ((*m_next_op_it)())
+                if ((*m_next_op_it)->execute(m_operation))
                     ++m_next_op_it;
                 ++m_run_time;
                 m_drum_index = (m_drum_index + 1) % 50;
@@ -300,20 +578,21 @@ void Computer::program_start()
         // m_half_cycle changes during execution.  The ifs are not exclusive.
         if (m_half_cycle == Half_Cycle::data)
         {
+            //!! make non-member
             m_operation = Operation(m_operation_register.value());
             std::cerr << "D: op=" << static_cast<int>(m_operation) << std::endl;
             m_operation_register.clear();
 
             bool restarted = false;
-            auto op_seq = m_operation_steps[operation_index(m_operation)];
+            auto op_seq = operation_steps(m_operation);
             auto op_end = op_seq.end();
-            auto inst_end = m_next_instruction_step.end();
+            auto inst_end = m_next_instruction_steps.end();
             // The operation sequence and the next address sequence may happen in parallel.
             // Loop until both are done.
             for (auto op_it = op_seq.begin(); op_it != op_end || m_next_op_it != inst_end; )
             {
                 if (op_it != op_end)
-                    if ((*op_it)())
+                    if ((*op_it)->execute(m_operation))
                         ++op_it;
                 // Don't bother looking for the next address if the program is done.
                 //! m_programmed_mode must be "stop"
@@ -326,7 +605,7 @@ void Computer::program_start()
                     // execution.  So the first time through, we just set the "restarted"
                     // flag.
                     if (restarted || op_it == op_end)
-                        if ((*m_next_op_it)())
+                        if ((*m_next_op_it)->execute(m_operation))
                             ++m_next_op_it;
                     restarted = true;
                 }
@@ -486,90 +765,6 @@ const Word Computer::get_storage(const Address& address) const
     return m_drum[address.value()];
 }
 
-bool Computer::instruction_to_program_register()
-{
-    std::cerr << m_run_time << " I to PR: addr=" << m_address_register 
-              << " drum=" << m_drum_index << std::endl;
-
-    TValue addr = m_address_register.value();
-    if (addr >= 8000 || m_drum_index == addr % 50)
-    {
-        m_program_register.load(get_storage(m_address_register), 0, 0);
-        std::cerr << "I to PR: PR=" << m_program_register << std::endl;
-        return true;
-    }
-    return false;
-}
-
-bool Computer::op_and_address_to_registers()
-{
-    //! Absorb instruction_address_to_address_register().  Condition setting the address
-    //! register for branch instructions.
-    m_operation_register.load(m_program_register, 0, 0);
-    m_address_register.load(m_program_register, 2, 0);
-    std::cerr << m_run_time << " Op and DA to reg: Op=" << m_operation_register
-              << " DA=" << m_address_register << std::endl;
-
-    m_half_cycle = Half_Cycle::data;
-    return true;
-}
-
-bool Computer::instruction_address_to_address_register()
-{
-    //! Do within op_and_address_to_registers().
-    m_address_register.load(m_program_register, 6, 0);
-    std::cerr << m_run_time << " IA to R: IA=" << m_address_register << std::endl;
-
-    m_half_cycle = Half_Cycle::instruction;
-    return true;
-}
-
-bool Computer::enable_program_register()
-{
-    std::cerr << "enable PR\n";
-    return true;
-}
-
-
-bool Computer::enable_distributor()
-{
-    std::cerr << m_run_time << " enable distributor\n";
-    return true;
-}
-
-bool Computer::data_to_distributor()
-{
-    std::cerr << m_run_time << " data to dist: addr=" << m_address_register
-              << " drum=" << m_drum_index << std::endl;
-
-    Address addr;
-    switch (m_operation)
-    {
-    case Operation::store_lower_in_memory:
-        m_distributor = m_lower_accumulator;
-        return true;
-    case Operation::store_lower_data_address:
-        addr.load(m_lower_accumulator, 2, 0);
-        m_distributor.load(addr, 0, 2);
-        return true;
-    case Operation::store_lower_instruction_address:
-        addr.load(m_lower_accumulator, 6, 0);
-        m_distributor.load(addr, 0, 6);
-        return true;
-    case Operation::store_upper_in_memory:
-        m_distributor = m_upper_accumulator;
-        return true;
-    }
-
-    if (m_drum_index == m_address_register.value() % 50)
-    {
-        m_distributor = get_storage(m_address_register);
-        std::cerr << "data to dist: dist=" << m_distributor << std::endl;
-        return true;
-    }
-    return false;
-}
-
 // The manual says the upper sign is affected by reset, multiplying and, dividing.  Addition
 // and subtraction are not in that list, but it's not clear if the upper sign should be
 // considered when adding to upper.  It's easiest to ignore (but preserve) the upper sign and
@@ -594,74 +789,6 @@ void Computer::add_to_accumulator(const Word& reg, bool to_upper, TDigit& carry)
     m_lower_accumulator.load(accum, word_size, 0);
 }
 
-bool Computer::distributor_to_accumulator()
-{
-    std::cerr << m_run_time << " Dist to Acc: Dist=" << m_distributor << std::endl;
-
-    // Wait for even time
-    if (!m_restart && m_run_time % 2 != 0)
-        return false;
-    
-    // Start looking for next instruction.
-    m_restart = true;
-
-    // It takes 2 cycles to fill the accumulator and we start on an even time.
-    if (m_run_time % 2 == 0)
-        return false;
-
-    TDigit carry = 0;
-
-    switch (m_operation)
-    {
-    case Operation::add_to_upper:
-        add_to_accumulator(m_distributor, true, carry);
-        break;
-    case Operation::subtract_from_upper:
-        add_to_accumulator(change_sign(m_distributor), true, carry);
-        break;
-    case Operation::add_to_lower:
-        add_to_accumulator(m_distributor, false, carry);
-        break;
-    case Operation::subtract_from_lower:
-        add_to_accumulator(change_sign(m_distributor), false, carry);
-        break;
-    case Operation::add_absolute_to_lower:
-        add_to_accumulator(abs(m_distributor), false, carry);
-        break;
-    case Operation::subtract_absolute_from_lower:
-        add_to_accumulator(change_sign(abs(m_distributor)), false, carry);
-        break;
-    case Operation::reset_and_add_into_upper:
-        m_upper_accumulator = m_distributor;
-        m_lower_accumulator.fill(0, m_upper_accumulator.sign());
-        break;
-    case Operation::reset_and_subtract_into_upper:
-        m_upper_accumulator = change_sign(m_distributor);
-        m_lower_accumulator.fill(0, m_upper_accumulator.sign());
-        break;
-    case Operation::reset_and_add_into_lower:
-        m_lower_accumulator = m_distributor;
-        m_upper_accumulator.fill(0, m_lower_accumulator.sign());
-        break;
-    case Operation::reset_and_subtract_into_lower:
-        m_lower_accumulator = change_sign(m_distributor);
-        m_upper_accumulator.fill(0, m_lower_accumulator.sign());
-        break;
-    case Operation::reset_and_add_absolute_into_lower:
-        m_lower_accumulator = abs(m_distributor);
-        m_upper_accumulator.fill(0, m_lower_accumulator.sign());
-        break;
-    case Operation::reset_and_subtract_absolute_into_lower:
-        m_lower_accumulator = change_sign(abs(m_distributor));
-        m_upper_accumulator.fill(0, m_lower_accumulator.sign());
-        break;
-    default:
-        assert(false);
-    }
-    m_overflow = carry > 0;
-    return true;
-}
-
 void Computer::shift_accumulator()
 {
     Signed_Register<2*word_size> accum;
@@ -672,127 +799,6 @@ void Computer::shift_accumulator()
     m_upper_accumulator.load(accum, 0, 0);
     m_upper_accumulator[0] = sign;
     m_lower_accumulator.load(accum, word_size, 0);
-}
-
-bool Computer::multiply()
-{
-    // Match the accumulator sign to the distributor so that the absolute value of the lower
-    // adds to the absolute value of the product, i.e the value in lower makes the product more
-    // positive if the product is positive, and more negative if it's negative.
-    if (m_multiply_shift_count == 0 && m_multiply_loop_count == 0)
-    {
-        m_upper_accumulator[0] = m_distributor[0];
-        m_lower_accumulator[0] = m_distributor[0];
-    }
-
-    if (m_multiply_loop_count == 0)
-    {
-        // Record the high digit and shift left.
-        m_multiply_loop_count = dec(m_upper_accumulator[word_size]);
-        shift_accumulator();
-        ++m_multiply_shift_count;
-        return false;
-    }
-
-    // Add the distributor until the loop count gets to 0.
-    TDigit carry = 0;
-    // Signal overflow if the product overflows its 10 digit and changes the units digit of the
-    // multiplier.
-    TDigit multiplier_units = m_upper_accumulator[m_multiply_shift_count+1];
-    add_to_accumulator(m_distributor, false, carry);
-    m_overflow = m_overflow || m_upper_accumulator[m_multiply_shift_count+1] != multiplier_units;
-    --m_multiply_loop_count;
-    if (m_multiply_loop_count > 0 || m_multiply_shift_count < word_size)
-        return false;
-
-    // Reset the shift count for the next multiplication.
-    m_multiply_shift_count = 0;
-    return true;
-}
-
-bool Computer::divide()
-{
-    if (m_multiply_shift_count == 0 && m_multiply_loop_count == 0)
-        m_lower_accumulator[0]
-            = bin(m_distributor.sign() == m_lower_accumulator.sign() ? '+' : '-');
-
-    if (m_multiply_loop_count == 0)
-    {
-        // Record the high digit and shift left.
-        m_multiply_loop_count = 1 + dec(m_upper_accumulator[word_size]);
-        shift_accumulator();
-        ++m_multiply_shift_count;
-        return false;
-    }
-
-    // Subtract the distributor until the sign changes.
-    TDigit carry = 0;
-    Signed_Register<word_size+1> a;
-    a[word_size+1] = m_multiply_loop_count - 1;
-    a.load(abs(m_upper_accumulator), 0, 1);
-    Signed_Register<word_size+1> b;
-    b[word_size+1] = 0;
-    b.load(abs(m_distributor), 0, 1);
-    a = add(a, change_sign(b), carry);
-    if (a.sign() == '+')
-    {
-        TDigit sign = m_upper_accumulator[0];
-        m_upper_accumulator.load(a, 1, 0);
-        m_upper_accumulator[0] = sign;
-        TDigit ones = dec(m_lower_accumulator[1]);
-        if (ones == 9)
-        {
-            //! The machine should stop unconditionally on quotient overflow.
-            m_overflow = true;
-            return true;
-        }
-        m_lower_accumulator[1] = bin(ones + 1);
-        return false;
-    }
-
-    m_multiply_loop_count = 0;
-    a = add(a, b, carry);
-
-    if (m_multiply_shift_count < word_size)
-        return false;
-
-    if (m_operation == Operation::divide_and_reset_upper)
-        m_upper_accumulator.fill(0, m_lower_accumulator.sign());
-
-    // Reset the shift count for the next multiplication.
-    m_multiply_shift_count = 0;
-    return true;
-}
-
-bool Computer::remove_interlock_a()
-{
-    std::cerr << m_run_time << " remove interlock A\n";
-    m_restart = false;
-    return true;
-}
-
-bool Computer::enable_position_set()
-{
-    return true;
-}
-
-bool Computer::store_distributor()
-{
-    std::cerr << m_run_time << " store dist: addr=" << m_address_register
-              << " dist=" << m_distributor << std::endl;
-
-    auto addr = m_address_register.value();
-    if (addr >= m_drum_capacity)
-    {
-        m_storage_selection_error = true;
-        return true;
-    }
-    if (m_drum_index == addr % 50)
-    {
-        set_storage(m_address_register, m_distributor);
-        return true;
-    }
-    return false;
 }
 
 #ifdef TEST

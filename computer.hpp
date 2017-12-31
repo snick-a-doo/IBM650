@@ -3,8 +3,7 @@
 
 #include "register.hpp"
 
-#include <map>
-#include <functional>
+#include <memory>
 #include <vector>
 
 namespace IBM650
@@ -16,8 +15,21 @@ namespace IBM650
     using UWord = Register<word_size>;
     using Word = Signed_Register<word_size>;
 
+    class Operation_Step;
+
 class Computer
 {
+    friend class Instruction_to_Program_Register;
+    friend class Op_and_Address_to_Registers;
+    friend class Instruction_Address_to_Address_Register;
+    friend class Data_to_Distributor;
+    friend class Distributor_to_Accumulator;
+    friend class Remove_Interlock_A;
+    friend class Enable_Position_Set;
+    friend class Store_Distributor;
+    friend class Multiply;
+    friend class Divide;
+
 public:
     Computer();
 
@@ -75,6 +87,38 @@ public:
     {
         stop,
         sense,
+    };
+
+    //!! move to source
+    enum class Operation
+    {
+        no_operation = 00,
+        stop = 01,
+
+        add_to_upper = 10,
+        subtract_from_upper = 11,
+        divide = 14,
+        add_to_lower = 15,
+        subtract_from_lower = 16,
+        add_absolute_to_lower = 17,
+        subtract_absolute_from_lower = 18,
+        multiply = 19,
+
+        store_lower_in_memory = 20,
+        store_upper_in_memory = 21,
+        store_lower_data_address = 22,
+        store_lower_instruction_address = 23,
+        store_distributor = 24,
+
+        reset_and_add_into_upper = 60,
+        reset_and_subtract_into_upper = 61,
+        divide_and_reset_upper = 64,
+        reset_and_add_into_lower = 65,
+        reset_and_subtract_into_lower = 66,
+        reset_and_add_absolute_into_lower = 67,
+        reset_and_subtract_absolute_into_lower = 68,
+
+        load_distributor = 69,
     };
 
     // Console Switches
@@ -176,37 +220,6 @@ private:
     void set_storage(const Address& address, const Word& word);
     /// @Return the word in the passed-in address.
     const Word get_storage(const Address& address) const;
-
-    enum class Operation
-    {
-        no_operation = 00,
-        stop = 01,
-
-        add_to_upper = 10,
-        subtract_from_upper = 11,
-        divide = 14,
-        add_to_lower = 15,
-        subtract_from_lower = 16,
-        add_absolute_to_lower = 17,
-        subtract_absolute_from_lower = 18,
-        multiply = 19,
-
-        store_lower_in_memory = 20,
-        store_upper_in_memory = 21,
-        store_lower_data_address = 22,
-        store_lower_instruction_address = 23,
-        store_distributor = 24,
-
-        reset_and_add_into_upper = 60,
-        reset_and_subtract_into_upper = 61,
-        divide_and_reset_upper = 64,
-        reset_and_add_into_lower = 65,
-        reset_and_subtract_into_lower = 66,
-        reset_and_add_absolute_into_lower = 67,
-        reset_and_subtract_absolute_into_lower = 68,
-
-        load_distributor = 69,
-    };
     Operation m_operation;
 
     /// The number of seconds that have passed since main power was turned on or off.
@@ -263,37 +276,22 @@ private:
     /// The drum position, 0-49.  Determines which addresses are at the read head.
     std::size_t m_drum_index;
 
-    using Op_Sequence = std::vector<std::function<bool()>>;
+    using Op_Sequence = std::vector<std::shared_ptr<Operation_Step>>;
     /// The common steps for finding and loading the next instruction.
-    Op_Sequence m_next_instruction_step;
+    Op_Sequence m_next_instruction_steps;
     /// The current position in the next-instruction steps.
     Op_Sequence::iterator m_next_op_it;
     /// The sequence of steps specific to an operation.  Operations that have the same sequence
     /// of steps (like addition and subtraction operation) use the same sequence.
-    std::vector<Op_Sequence> m_operation_steps;
+    Op_Sequence operation_steps(Operation op);
     /// @Return the index into the operation sequence vector for the given opcode.
     std::size_t operation_index(Operation op) const;
 
-    // Operation steps
-    bool instruction_to_program_register();
-    bool op_and_address_to_registers();
-    bool instruction_address_to_address_register();
-    bool enable_program_register();
-    bool enable_distributor();
-    bool data_to_distributor();
-    bool distributor_to_accumulator();
-    bool multiply();
-    bool divide();
-    bool remove_interlock_a();
-    bool enable_position_set();
-    bool store_distributor();
-
+    // Support for multiply and divide loops.
     void add_to_accumulator(const Word& reg, bool to_upper, TDigit& carry);
     void shift_accumulator();
-
-    int m_multiply_shift_count;
-    int m_multiply_loop_count;
 };
+
 }
 
 #endif
