@@ -461,7 +461,8 @@ BOOST_AUTO_TEST_CASE(LD_timing)
     // t = 151
     // 2 to fill PR, OP, DA to ADDR
     // 0 for stop
-    BOOST_CHECK_EQUAL(f.computer.run_time(), 153);
+    // 2 to for IA to ADDR, enable PR
+    BOOST_CHECK_EQUAL(f.computer.run_time(), 155);
     BOOST_CHECK_EQUAL(f.computer.display(), f.data);
 }
 
@@ -510,7 +511,8 @@ BOOST_AUTO_TEST_CASE(optimum_LD_timing)
     // t = 11
     // 2 to fill PR, OP, DA to ADDR
     // 0 for stop
-    BOOST_CHECK_EQUAL(f.computer.run_time(), 13);
+    // 2 to for IA to ADDR, enable PR
+    BOOST_CHECK_EQUAL(f.computer.run_time(), 15);
     BOOST_CHECK_EQUAL(f.computer.display(), f.data);
 }
 
@@ -562,7 +564,8 @@ BOOST_AUTO_TEST_CASE(RAL_timing)
     // t = 151
     // 2 to fill PR, OP, DA to ADDR
     // 0 for stop
-    BOOST_CHECK_EQUAL(f.computer.run_time(), 153);
+    // 2 to for IA to ADDR, enable PR
+    BOOST_CHECK_EQUAL(f.computer.run_time(), 155);
     BOOST_CHECK_EQUAL(f.computer.display(), f.data);
 }
 
@@ -614,6 +617,7 @@ BOOST_AUTO_TEST_CASE(optimum_RAL_timing)
     // t = 13
     // 2 to fill PR, OP, DA to ADDR
     // 0 for stop
-    BOOST_CHECK_EQUAL(f.computer.run_time(), 15);
+    // 2 to for IA to ADDR, enable PR
+    BOOST_CHECK_EQUAL(f.computer.run_time(), 17);
     BOOST_CHECK_EQUAL(f.computer.display(), f.data);
 }

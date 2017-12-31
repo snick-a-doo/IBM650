@@ -89,38 +89,6 @@ public:
         sense,
     };
 
-    //!! move to source
-    enum class Operation
-    {
-        no_operation = 00,
-        stop = 01,
-
-        add_to_upper = 10,
-        subtract_from_upper = 11,
-        divide = 14,
-        add_to_lower = 15,
-        subtract_from_lower = 16,
-        add_absolute_to_lower = 17,
-        subtract_absolute_from_lower = 18,
-        multiply = 19,
-
-        store_lower_in_memory = 20,
-        store_upper_in_memory = 21,
-        store_lower_data_address = 22,
-        store_lower_instruction_address = 23,
-        store_distributor = 24,
-
-        reset_and_add_into_upper = 60,
-        reset_and_subtract_into_upper = 61,
-        divide_and_reset_upper = 64,
-        reset_and_add_into_lower = 65,
-        reset_and_subtract_into_lower = 66,
-        reset_and_add_absolute_into_lower = 67,
-        reset_and_subtract_absolute_into_lower = 68,
-
-        load_distributor = 69,
-    };
-
     // Console Switches
 
     /// Set the storage-entry switches.  10 digit selectors and 1 sign selector for the word at
@@ -220,7 +188,6 @@ private:
     void set_storage(const Address& address, const Word& word);
     /// @Return the word in the passed-in address.
     const Word get_storage(const Address& address) const;
-    Operation m_operation;
 
     /// The number of seconds that have passed since main power was turned on or off.
     TTime m_elapsed_seconds;
@@ -269,6 +236,7 @@ private:
     bool m_clocking_error;
     bool m_error_sense;
 
+    //! Make drum class with step(), is_at_head(), read(), write()
     /// The number of words that can be stored on the drum.
     constexpr static size_t m_drum_capacity = 2000;
     /// The words stored on the drum.
@@ -277,15 +245,11 @@ private:
     std::size_t m_drum_index;
 
     using Op_Sequence = std::vector<std::shared_ptr<Operation_Step>>;
-    /// The common steps for finding and loading the next instruction.
-    Op_Sequence m_next_instruction_steps;
-    /// The current position in the next-instruction steps.
-    Op_Sequence::iterator m_next_op_it;
-    /// The sequence of steps specific to an operation.  Operations that have the same sequence
-    /// of steps (like addition and subtraction operation) use the same sequence.
-    Op_Sequence operation_steps(Operation op);
-    /// @Return the index into the operation sequence vector for the given opcode.
-    std::size_t operation_index(Operation op) const;
+    /// The steps for finding and loading the next instruction during the instruction
+    /// half-cycle.
+    const Op_Sequence m_next_instruction_i_steps;
+    /// The steps for finding and loading the next instruction during the data half-cycle.
+    const Op_Sequence m_next_instruction_d_steps;
 
     // Support for multiply and divide loops.
     void add_to_accumulator(const Word& reg, bool to_upper, TDigit& carry);

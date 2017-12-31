@@ -4,38 +4,78 @@
 
 using namespace IBM650;
 
-namespace
-{
-    /// DC power comes on 3 minutes after main power.
-    const TTime dc_on_delay_seconds = 180;
-    /// The blower stays on 5 minutes after main power is turned off.
-    const TTime blower_off_delay_seconds = 300;
-
-    const Address storage_entry_address({8,0,0,0});
-    const Address distributor_address({8,0,0,1});
-    const Address lower_accumulator_address({8,0,0,2});
-    const Address upper_accumulator_address({8,0,0,3});
-}
 
 namespace IBM650
 {
-#define OPERATION_STEP(name, body) \
-class name : public Operation_Step { \
-public: \
-    name(Computer& computer) : Operation_Step(computer) {}; \
-    virtual bool execute(Computer::Operation op) override body \
+/// DC power comes on 3 minutes after main power.
+const TTime dc_on_delay_seconds = 180;
+/// The blower stays on 5 minutes after main power is turned off.
+const TTime blower_off_delay_seconds = 300;
+
+const Address storage_entry_address({8,0,0,0});
+const Address distributor_address({8,0,0,1});
+const Address lower_accumulator_address({8,0,0,2});
+const Address upper_accumulator_address({8,0,0,3});
+
+enum class Operation
+{
+    no_operation = 00,
+    stop = 01,
+
+    add_to_upper = 10,
+    subtract_from_upper = 11,
+    divide = 14,
+    add_to_lower = 15,
+    subtract_from_lower = 16,
+    add_absolute_to_lower = 17,
+    subtract_absolute_from_lower = 18,
+    multiply = 19,
+
+    store_lower_in_memory = 20,
+    store_upper_in_memory = 21,
+    store_lower_data_address = 22,
+    store_lower_instruction_address = 23,
+    store_distributor = 24,
+
+    reset_and_add_into_upper = 60,
+    reset_and_subtract_into_upper = 61,
+    divide_and_reset_upper = 64,
+    reset_and_add_into_lower = 65,
+    reset_and_subtract_into_lower = 66,
+    reset_and_add_absolute_into_lower = 67,
+    reset_and_subtract_absolute_into_lower = 68,
+
+    load_distributor = 69,
+};
+
+#define ADDRESS_STEP(name, body)                                        \
+    class name : public Operation_Step {                                \
+    public:                                                             \
+    name(Computer& computer) : Operation_Step(computer, Operation::no_operation) {}; \
+    virtual bool execute() override body                                \
+};
+
+#define OPERATION_STEP(name, body)                                      \
+    class name : public Operation_Step {                                \
+    public:                                                             \
+    name(Computer& computer, Operation op) : Operation_Step(computer, op) {}; \
+    virtual bool execute() override body                                \
 };
 
 class Operation_Step
 {
 public:
-    Operation_Step(Computer& computer) : c(computer) {};
-    virtual bool execute(Computer::Operation op) { return true; }
+    Operation_Step(Computer& computer, Operation op)
+        : c(computer),
+          op(op)
+        {};
+    virtual bool execute() { return true; }
 protected:
     Computer& c;
+    Operation op;
 };
 
-OPERATION_STEP(Instruction_to_Program_Register,
+ADDRESS_STEP(Instruction_to_Program_Register,
 {
     std::cerr << "I to P addr:=" << c.m_address_register << std::endl;
     TValue addr = c.m_address_register.value();
@@ -48,10 +88,8 @@ OPERATION_STEP(Instruction_to_Program_Register,
     return false;
 })
 
-OPERATION_STEP(Op_and_Address_to_Registers,
+ADDRESS_STEP(Op_and_Address_to_Registers,
 {
-    //! Absorb instruction_address_to_address_register().  Condition setting the address
-    //! register for branch instructions.
     c.m_operation_register.load(c.m_program_register, 0, 0);
     c.m_address_register.load(c.m_program_register, 2, 0);
     std::cerr << c.m_run_time << " Op and DA to reg: Op=" << c.m_operation_register
@@ -61,9 +99,8 @@ OPERATION_STEP(Op_and_Address_to_Registers,
     return true;
 })
 
-OPERATION_STEP(Instruction_Address_to_Address_Register,
+ADDRESS_STEP(Instruction_Address_to_Address_Register,
 {
-    //! Do within op_and_address_to_registers().
     c.m_address_register.load(c.m_program_register, 6, 0);
     std::cerr << c.m_run_time << " IA to R: IA=" << c.m_address_register << std::endl;
 
@@ -71,7 +108,7 @@ OPERATION_STEP(Instruction_Address_to_Address_Register,
     return true;
 })
 
-OPERATION_STEP(Enable_Program_Register,
+ADDRESS_STEP(Enable_Program_Register,
 {
     std::cerr << "enable PR\n";
     return true;
@@ -84,18 +121,18 @@ OPERATION_STEP(Data_to_Distributor,
     Address addr;
     switch (op)
     {
-    case Computer::Operation::store_lower_in_memory:
+    case Operation::store_lower_in_memory:
         c.m_distributor = c.m_lower_accumulator;
         return true;
-    case Computer::Operation::store_lower_data_address:
+    case Operation::store_lower_data_address:
         addr.load(c.m_lower_accumulator, 2, 0);
         c.m_distributor.load(addr, 0, 2);
         return true;
-    case Computer::Operation::store_lower_instruction_address:
+    case Operation::store_lower_instruction_address:
         addr.load(c.m_lower_accumulator, 6, 0);
         c.m_distributor.load(addr, 0, 6);
         return true;
-    case Computer::Operation::store_upper_in_memory:
+    case Operation::store_upper_in_memory:
         c.m_distributor = c.m_upper_accumulator;
         return true;
     }
@@ -125,47 +162,47 @@ OPERATION_STEP(Distributor_to_Accumulator,
 
     TDigit carry = 0;
 
-    switch (c.m_operation)
+    switch (op)
     {
-    case Computer::Operation::add_to_upper:
+    case Operation::add_to_upper:
         c.add_to_accumulator(c.m_distributor, true, carry);
         break;
-    case Computer::Operation::subtract_from_upper:
+    case Operation::subtract_from_upper:
         c.add_to_accumulator(change_sign(c.m_distributor), true, carry);
         break;
-    case Computer::Operation::add_to_lower:
+    case Operation::add_to_lower:
         c.add_to_accumulator(c.m_distributor, false, carry);
         break;
-    case Computer::Operation::subtract_from_lower:
+    case Operation::subtract_from_lower:
         c.add_to_accumulator(change_sign(c.m_distributor), false, carry);
         break;
-    case Computer::Operation::add_absolute_to_lower:
+    case Operation::add_absolute_to_lower:
         c.add_to_accumulator(abs(c.m_distributor), false, carry);
         break;
-    case Computer::Operation::subtract_absolute_from_lower:
+    case Operation::subtract_absolute_from_lower:
         c.add_to_accumulator(change_sign(abs(c.m_distributor)), false, carry);
         break;
-    case Computer::Operation::reset_and_add_into_upper:
+    case Operation::reset_and_add_into_upper:
         c.m_upper_accumulator = c.m_distributor;
         c.m_lower_accumulator.fill(0, c.m_upper_accumulator.sign());
         break;
-    case Computer::Operation::reset_and_subtract_into_upper:
+    case Operation::reset_and_subtract_into_upper:
         c.m_upper_accumulator = change_sign(c.m_distributor);
         c.m_lower_accumulator.fill(0, c.m_upper_accumulator.sign());
         break;
-    case Computer::Operation::reset_and_add_into_lower:
+    case Operation::reset_and_add_into_lower:
         c.m_lower_accumulator = c.m_distributor;
         c.m_upper_accumulator.fill(0, c.m_lower_accumulator.sign());
         break;
-    case Computer::Operation::reset_and_subtract_into_lower:
+    case Operation::reset_and_subtract_into_lower:
         c.m_lower_accumulator = change_sign(c.m_distributor);
         c.m_upper_accumulator.fill(0, c.m_lower_accumulator.sign());
         break;
-    case Computer::Operation::reset_and_add_absolute_into_lower:
+    case Operation::reset_and_add_absolute_into_lower:
         c.m_lower_accumulator = abs(c.m_distributor);
         c.m_upper_accumulator.fill(0, c.m_lower_accumulator.sign());
         break;
-    case Computer::Operation::reset_and_subtract_absolute_into_lower:
+    case Operation::reset_and_subtract_absolute_into_lower:
         c.m_lower_accumulator = change_sign(abs(c.m_distributor));
         c.m_upper_accumulator.fill(0, c.m_lower_accumulator.sign());
         break;
@@ -207,9 +244,9 @@ OPERATION_STEP(Store_Distributor,
 class Multiply : public Operation_Step
 {
 public:
-    Multiply(Computer& computer) : Operation_Step(computer) {}
+    Multiply(Computer& computer, Operation op) : Operation_Step(computer, op) {}
 
-    virtual bool execute(Computer::Operation op) override {
+    virtual bool execute() override {
         // Match the accumulator sign to the distributor so that the absolute value of the lower
         // adds to the absolute value of the product, i.e the value in lower makes the product more
         // positive if the product is positive, and more negative if it's negative.
@@ -239,10 +276,9 @@ public:
         if (m_upper_overflow > 0 || m_shift_count < word_size)
             return false;
 
-        // Reset the shift count for the next multiplication.
-        m_shift_count = 0;
         return true;
     }
+
 private:
     TDigit m_upper_overflow = 0;
     std::size_t m_shift_count = 0;
@@ -251,9 +287,9 @@ private:
 class Divide : public Operation_Step
 {
 public:
-    Divide(Computer& computer) : Operation_Step(computer) {}
+    Divide(Computer& computer, Operation op) : Operation_Step(computer, op) {}
 
-    virtual bool execute(Computer::Operation op) override {
+    virtual bool execute() override {
         if (m_shift_count == 0 && m_upper_overflow == 0)
             c.m_lower_accumulator[0]
                 = bin(c.m_distributor.sign() == c.m_lower_accumulator.sign() ? '+' : '-');
@@ -300,18 +336,81 @@ public:
         if (m_shift_count < word_size)
             return false;
 
-        if (c.m_operation == Computer::Operation::divide_and_reset_upper)
+        if (op == Operation::divide_and_reset_upper)
             c.m_upper_accumulator.fill(0, c.m_lower_accumulator.sign());
 
-        // Reset the shift count for the next division.
-        m_shift_count = 0;
         return true;
     }
+
 private:
     TDigit m_upper_overflow = 0;
     std::size_t m_shift_count = 0;
     bool m_shift = true;
 };
+}
+
+using Op_Sequence = std::vector<std::shared_ptr<Operation_Step>>;
+
+/// @return the steps for the passed-in operation.
+Op_Sequence operation_steps(Computer& computer, Operation op)
+{
+    Op_Sequence steps;
+    switch (op)
+    {
+    case Operation::no_operation:
+    case Operation::stop:
+        break;
+    case Operation::load_distributor:
+        steps.push_back(std::make_shared<Enable_Distributor>(computer, op));
+        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
+        break;
+    case Operation::add_to_upper:
+    case Operation::subtract_from_upper:
+    case Operation::add_to_lower:
+    case Operation::subtract_from_lower:
+    case Operation::add_absolute_to_lower:
+    case Operation::subtract_absolute_from_lower:
+    case Operation::reset_and_add_into_upper:
+    case Operation::reset_and_subtract_into_upper:
+    case Operation::reset_and_add_into_lower:
+    case Operation::reset_and_subtract_into_lower:
+    case Operation::reset_and_add_absolute_into_lower:
+    case Operation::reset_and_subtract_absolute_into_lower:
+        steps.push_back(std::make_shared<Enable_Distributor>(computer, op));
+        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
+        steps.push_back(std::make_shared<Distributor_to_Accumulator>(computer, op));
+        steps.push_back(std::make_shared<Remove_Interlock_A>(computer, op));
+        break;
+    case Operation::store_distributor:
+        steps.push_back(std::make_shared<Enable_Position_Set>(computer, op));
+        steps.push_back(std::make_shared<Store_Distributor>(computer, op));
+        break;
+    case Operation::store_lower_in_memory:
+    case Operation::store_upper_in_memory:
+        steps.push_back(std::make_shared<Enable_Distributor>(computer, op));
+        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
+        steps.push_back(std::make_shared<Store_Distributor>(computer, op));
+        break;
+    case Operation::store_lower_data_address:
+    case Operation::store_lower_instruction_address:
+        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
+        steps.push_back(std::make_shared<Store_Distributor>(computer, op));
+        break;
+    case Operation::multiply:
+        steps.push_back(std::make_shared<Enable_Distributor>(computer, op));
+        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
+        steps.push_back(std::make_shared<Multiply>(computer, op));
+        steps.push_back(std::make_shared<Remove_Interlock_A>(computer, op));
+        break;
+    case Operation::divide:
+    case Operation::divide_and_reset_upper:
+        steps.push_back(std::make_shared<Enable_Distributor>(computer, op));
+        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
+        steps.push_back(std::make_shared<Divide>(computer, op));
+        steps.push_back(std::make_shared<Remove_Interlock_A>(computer, op));
+        break;
+    }
+    return steps;
 }
 
 /// The initial state is: powered off for long enough that the blower is off.
@@ -330,15 +429,14 @@ Computer::Computer()
       m_storage_selection_error(false),
       m_clocking_error(false),
       m_error_sense(false),
-      m_drum_index(0)
-{
-    m_next_instruction_steps = {
+      m_drum_index(0),
+      m_next_instruction_i_steps {
         std::make_shared<Instruction_to_Program_Register>(*this),
-        std::make_shared<Op_and_Address_to_Registers>(*this),
+        std::make_shared<Op_and_Address_to_Registers>(*this) },
+      m_next_instruction_d_steps {
         std::make_shared<Instruction_Address_to_Address_Register>(*this),
-        std::make_shared<Enable_Program_Register>(*this)
-    };
-}
+        std::make_shared<Enable_Program_Register>(*this) }
+{}
 
 void Computer::power_on()
 {
@@ -471,67 +569,6 @@ void Computer::transfer()
         m_address_register = m_address_entry;
 }
 
-Computer::Op_Sequence Computer::operation_steps(Operation op)
-{
-    Op_Sequence steps;
-    switch (op)
-    {
-    case Operation::no_operation:
-    case Operation::stop:
-        break;
-    case Operation::load_distributor:
-        steps.push_back(std::make_shared<Enable_Distributor>(*this));
-        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
-        break;
-    case Operation::add_to_upper:
-    case Operation::subtract_from_upper:
-    case Operation::add_to_lower:
-    case Operation::subtract_from_lower:
-    case Operation::add_absolute_to_lower:
-    case Operation::subtract_absolute_from_lower:
-    case Operation::reset_and_add_into_upper:
-    case Operation::reset_and_subtract_into_upper:
-    case Operation::reset_and_add_into_lower:
-    case Operation::reset_and_subtract_into_lower:
-    case Operation::reset_and_add_absolute_into_lower:
-    case Operation::reset_and_subtract_absolute_into_lower:
-        steps.push_back(std::make_shared<Enable_Distributor>(*this));
-        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
-        steps.push_back(std::make_shared<Distributor_to_Accumulator>(*this));
-        steps.push_back(std::make_shared<Remove_Interlock_A>(*this));
-        break;
-    case Operation::store_distributor:
-        steps.push_back(std::make_shared<Enable_Position_Set>(*this));
-        steps.push_back(std::make_shared<Store_Distributor>(*this));
-        break;
-    case Operation::store_lower_in_memory:
-    case Operation::store_upper_in_memory:
-        steps.push_back(std::make_shared<Enable_Distributor>(*this));
-        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
-        steps.push_back(std::make_shared<Store_Distributor>(*this));
-        break;
-    case Operation::store_lower_data_address:
-    case Operation::store_lower_instruction_address:
-        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
-        steps.push_back(std::make_shared<Store_Distributor>(*this));
-        break;
-    case Operation::multiply:
-        steps.push_back(std::make_shared<Enable_Distributor>(*this));
-        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
-        steps.push_back(std::make_shared<Multiply>(*this));
-        steps.push_back(std::make_shared<Remove_Interlock_A>(*this));
-        break;
-    case Operation::divide:
-    case Operation::divide_and_reset_upper:
-        steps.push_back(std::make_shared<Enable_Distributor>(*this));
-        steps.push_back(std::make_shared<Data_to_Distributor>(*this));
-        steps.push_back(std::make_shared<Divide>(*this));
-        steps.push_back(std::make_shared<Remove_Interlock_A>(*this));
-        break;
-    }
-    return steps;
-}
-
 void Computer::program_start()
 {
     std::cerr << "program start\n";
@@ -563,12 +600,12 @@ void Computer::program_start()
         {
             std::cerr << "I\n";
             // Load the data address.
-            for (m_next_op_it = m_next_instruction_steps.begin();
-                 m_half_cycle == Half_Cycle::instruction; )
+            for (auto next_op_it = m_next_instruction_i_steps.begin();
+                 next_op_it != m_next_instruction_i_steps.end(); )
             {
                 // Execute the operation.  Go on to the next operation if this one is done.
-                if ((*m_next_op_it)->execute(m_operation))
-                    ++m_next_op_it;
+                if ((*next_op_it)->execute())
+                    ++next_op_it;
                 ++m_run_time;
                 m_drum_index = (m_drum_index + 1) % 50;
             }
@@ -578,42 +615,39 @@ void Computer::program_start()
         // m_half_cycle changes during execution.  The ifs are not exclusive.
         if (m_half_cycle == Half_Cycle::data)
         {
-            //!! make non-member
-            m_operation = Operation(m_operation_register.value());
-            std::cerr << "D: op=" << static_cast<int>(m_operation) << std::endl;
+            Operation operation = Operation(m_operation_register.value());
+            std::cerr << "D: op=" << static_cast<int>(operation) << std::endl;
             m_operation_register.clear();
 
             bool restarted = false;
-            auto op_seq = operation_steps(m_operation);
+            auto op_seq = operation_steps(*this, operation);
             auto op_end = op_seq.end();
-            auto inst_end = m_next_instruction_steps.end();
+            auto next_op_it = m_next_instruction_d_steps.begin();
+            auto inst_end = m_next_instruction_d_steps.end();
             // The operation sequence and the next address sequence may happen in parallel.
             // Loop until both are done.
-            for (auto op_it = op_seq.begin(); op_it != op_end || m_next_op_it != inst_end; )
+            for (auto op_it = op_seq.begin(); op_it != op_end || next_op_it != inst_end; )
             {
                 if (op_it != op_end)
-                    if ((*op_it)->execute(m_operation))
+                    if ((*op_it)->execute())
                         ++op_it;
-                // Don't bother looking for the next address if the program is done.
-                //! m_programmed_mode must be "stop"
-                if (m_operation == Operation::stop && op_it == op_end)
-                    return;
 
-                if ((m_restart || op_it == op_end) && m_next_op_it != inst_end)
+                if ((m_restart || op_it == op_end) && next_op_it != inst_end)
                 {
                     // It takes a cycle to process the "restart" signal and begin parallel
                     // execution.  So the first time through, we just set the "restarted"
                     // flag.
                     if (restarted || op_it == op_end)
-                        if ((*m_next_op_it)->execute(m_operation))
-                            ++m_next_op_it;
+                        if ((*next_op_it)->execute())
+                            ++next_op_it;
                     restarted = true;
                 }
 
                 ++m_run_time;
                 m_drum_index = (m_drum_index + 1) % 50;
             }
-            if (m_cycle_mode == Half_Cycle_Mode::half)
+            //! Don't stop on op=stop if m_programmed_mode is not "stop".
+            if (m_cycle_mode == Half_Cycle_Mode::half || operation == Operation::stop)
                 return;
         }
     }
