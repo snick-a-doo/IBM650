@@ -79,7 +79,7 @@ ADDRESS_STEP(Instruction_to_Program_Register,
 {
     std::cerr << "I to P addr:=" << c.m_address_register << std::endl;
     TValue addr = c.m_address_register.value();
-    if (addr >= 8000 || c.m_drum_index == addr % 50)
+    if (addr >= 8000 || c.m_drum.is_at_head(c.m_address_register))
     {
         c.m_program_register.load(c.get_storage(c.m_address_register), 0, 0);
         std::cerr << "I to PR: PR=" << c.m_program_register << std::endl;
@@ -137,7 +137,7 @@ OPERATION_STEP(Data_to_Distributor,
         return true;
     }
 
-    if (c.m_drum_index == c.m_address_register.value() % 50)
+    if (c.m_drum.is_at_head(c.m_address_register))
     {
         c.m_distributor = c.get_storage(c.m_address_register);
         return true;
@@ -227,13 +227,12 @@ OPERATION_STEP(Store_Distributor,
     std::cerr << c.m_run_time << " store dist: addr=" << c.m_address_register
               << " dist=" << c.m_distributor << std::endl;
 
-    auto addr = c.m_address_register.value();
-    if (addr >= c.m_drum_capacity)
+    if (!c.m_drum.is_address(c.m_address_register))
     {
         c.m_storage_selection_error = true;
         return true;
     }
-    if (c.m_drum_index == addr % 50)
+    if (c.m_drum.is_at_head(c.m_address_register))
     {
         c.set_storage(c.m_address_register, c.m_distributor);
         return true;
@@ -429,7 +428,6 @@ Computer::Computer()
       m_storage_selection_error(false),
       m_clocking_error(false),
       m_error_sense(false),
-      m_drum_index(0),
       m_next_instruction_i_steps {
         std::make_shared<Instruction_to_Program_Register>(*this),
         std::make_shared<Op_and_Address_to_Registers>(*this) },
@@ -607,7 +605,7 @@ void Computer::program_start()
                 if ((*next_op_it)->execute())
                     ++next_op_it;
                 ++m_run_time;
-                m_drum_index = (m_drum_index + 1) % 50;
+                m_drum.step();
             }
             if (m_cycle_mode == Half_Cycle_Mode::half)
                 return;
@@ -644,7 +642,7 @@ void Computer::program_start()
                 }
 
                 ++m_run_time;
-                m_drum_index = (m_drum_index + 1) % 50;
+                m_drum.step();
             }
             //! Don't stop on op=stop if m_programmed_mode is not "stop".
             if (m_cycle_mode == Half_Cycle_Mode::half || operation == Operation::stop)
@@ -779,7 +777,7 @@ int Computer::run_time() const
 
 void Computer::set_storage(const Address& address, const Word& word)
 {
-    m_drum[address.value()] = word;
+    m_drum.write(address, word);
 }
 
 const Word Computer::get_storage(const Address& address) const
@@ -794,9 +792,7 @@ const Word Computer::get_storage(const Address& address) const
         return m_lower_accumulator;
     else if (address == upper_accumulator_address)
         return m_upper_accumulator;
-
-    assert(address.value() < m_drum.size());
-    return m_drum[address.value()];
+    return m_drum.read(address);
 }
 
 // The manual says the upper sign is affected by reset, multiplying and, dividing.  Addition
@@ -861,7 +857,7 @@ void Computer::set_program_register(const Word& reg)
 
 void Computer::set_drum(const Address& address, const Word& word)
 {
-    m_drum[address.value()] = word;
+    m_drum.write(address, word);
 }
 
 void Computer::set_error()
@@ -874,6 +870,33 @@ void Computer::set_error()
 
 Word Computer::get_drum(const Address& address) const
 {
-    return m_drum[address.value()];
+    return m_drum.read(address);
 }
 #endif // TEST
+
+void Computer::Drum::step()
+{
+    m_index = (m_index + 1) % 50;
+}
+
+bool Computer::Drum::is_address(const Address& address) const
+{
+    return address.value() < m_capacity;
+}
+
+bool Computer::Drum::is_at_head(const Address& address) const
+{
+    return m_index == address.value() % 50;
+}
+
+Word Computer::Drum::read(const Address& address) const
+{
+    assert(address.value() < m_capacity);
+    return m_storage[address.value()];
+}
+
+void Computer::Drum::write(const Address& address, const Word& word)
+{
+    assert(address.value() < m_capacity);
+    m_storage[address.value()] = word;
+}

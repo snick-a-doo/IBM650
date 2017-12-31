@@ -236,13 +236,24 @@ private:
     bool m_clocking_error;
     bool m_error_sense;
 
-    //! Make drum class with step(), is_at_head(), read(), write()
-    /// The number of words that can be stored on the drum.
-    constexpr static size_t m_drum_capacity = 2000;
-    /// The words stored on the drum.
-    std::array<Word, m_drum_capacity> m_drum;
-    /// The drum position, 0-49.  Determines which addresses are at the read head.
-    std::size_t m_drum_index;
+    class Drum
+    {
+    public:
+        void step();
+        bool is_address(const Address& address) const;
+        bool is_at_head(const Address& address) const;
+        Word read(const Address& address) const;
+        void write(const Address& address, const Word& word);
+    private:
+        /// The number of words that can be stored on the drum.
+        constexpr static size_t m_capacity = 2000;
+        /// The words stored on the drum.
+        std::array<Word, m_capacity> m_storage;
+        /// The drum position, 0-49.  Determines which addresses are at the read head.
+        std::size_t m_index = 0;
+    };
+
+    Drum m_drum;
 
     using Op_Sequence = std::vector<std::shared_ptr<Operation_Step>>;
     /// The steps for finding and loading the next instruction during the instruction
