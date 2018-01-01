@@ -17,6 +17,8 @@ const Address distributor_address({8,0,0,1});
 const Address lower_accumulator_address({8,0,0,2});
 const Address upper_accumulator_address({8,0,0,3});
 
+const Word zero({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
 enum class Operation
 {
     no_operation = 00,
@@ -37,6 +39,11 @@ enum class Operation
     store_lower_instruction_address = 23,
     store_distributor = 24,
 
+    branch_on_nonzero_in_upper = 44,
+    branch_on_nonzero = 45,
+    branch_on_minus = 46,
+    branch_on_overflow = 47,
+
     reset_and_add_into_upper = 60,
     reset_and_subtract_into_upper = 61,
     divide_and_reset_upper = 64,
@@ -46,13 +53,8 @@ enum class Operation
     reset_and_subtract_absolute_into_lower = 68,
 
     load_distributor = 69,
-};
 
-#define ADDRESS_STEP(name, body)                                        \
-    class name : public Operation_Step {                                \
-    public:                                                             \
-    name(Computer& computer) : Operation_Step(computer, Operation::no_operation) {}; \
-    virtual bool execute() override body                                \
+    branch_on_8_in_distributor_position_10 = 90
 };
 
 #define OPERATION_STEP(name, body)                                      \
@@ -75,7 +77,7 @@ protected:
     Operation op;
 };
 
-ADDRESS_STEP(Instruction_to_Program_Register,
+OPERATION_STEP(Instruction_to_Program_Register,
 {
     std::cerr << "I to P addr:=" << c.m_address_register << std::endl;
     TValue addr = c.m_address_register.value();
@@ -88,7 +90,7 @@ ADDRESS_STEP(Instruction_to_Program_Register,
     return false;
 })
 
-ADDRESS_STEP(Op_and_Address_to_Registers,
+OPERATION_STEP(Op_and_Address_to_Registers,
 {
     c.m_operation_register.load(c.m_program_register, 0, 0);
     c.m_address_register.load(c.m_program_register, 2, 0);
@@ -99,16 +101,48 @@ ADDRESS_STEP(Op_and_Address_to_Registers,
     return true;
 })
 
-ADDRESS_STEP(Instruction_Address_to_Address_Register,
+OPERATION_STEP(Instruction_Address_to_Address_Register,
 {
-    c.m_address_register.load(c.m_program_register, 6, 0);
+    bool branch = false;
+    switch (op)
+    {
+    case Operation::branch_on_nonzero_in_upper:
+        branch = abs(c.m_upper_accumulator) != zero;
+        break;
+    case Operation::branch_on_nonzero:
+        branch = abs(c.m_upper_accumulator) != zero || abs(c.m_lower_accumulator) != zero;
+        break;
+    case Operation::branch_on_minus:
+        branch = c.m_lower_accumulator.sign() == '-';
+        break;
+    case Operation::branch_on_overflow:
+        branch = c.m_overflow;
+        break;
+    default:
+    {
+        // Positions are counted from least significant to most significant.  The opcode for
+        // position 10 is 90; the others are 90 + position.
+        int pos = static_cast<int>(op)
+            - static_cast<int>(Operation::branch_on_8_in_distributor_position_10);        
+        pos = pos == 0 ? 10 : pos;
+        if (0 < pos && pos <= 10)
+        {
+            TDigit digit = dec(c.m_distributor[pos]);
+            branch = digit == 8;
+            c.m_error_stop = !branch && digit != 9;
+        }
+    }
+    }
+
+    if (!branch)
+        c.m_address_register.load(c.m_program_register, 6, 0);
     std::cerr << c.m_run_time << " IA to R: IA=" << c.m_address_register << std::endl;
 
     c.m_half_cycle = c.Half_Cycle::instruction;
     return true;
 })
 
-ADDRESS_STEP(Enable_Program_Register,
+OPERATION_STEP(Enable_Program_Register,
 {
     std::cerr << "enable PR\n";
     return true;
@@ -350,19 +384,33 @@ private:
 
 using Op_Sequence = std::vector<std::shared_ptr<Operation_Step>>;
 
+Op_Sequence next_instruction_i_steps(Computer& computer, Operation op)
+{
+    return { std::make_shared<Instruction_to_Program_Register>(computer, op),
+            std::make_shared<Op_and_Address_to_Registers>(computer, op) };
+}
+
+Op_Sequence next_instruction_d_steps(Computer& computer, Operation op)
+{
+    return { std::make_shared<Instruction_Address_to_Address_Register>(computer, op),
+            std::make_shared<Enable_Program_Register>(computer, op) };
+}
+
 /// @return the steps for the passed-in operation.
 Op_Sequence operation_steps(Computer& computer, Operation op)
 {
-    Op_Sequence steps;
     switch (op)
     {
     case Operation::no_operation:
     case Operation::stop:
-        break;
+    case Operation::branch_on_nonzero_in_upper:
+    case Operation::branch_on_nonzero:
+    case Operation::branch_on_minus:
+    case Operation::branch_on_overflow:
+        return {};
     case Operation::load_distributor:
-        steps.push_back(std::make_shared<Enable_Distributor>(computer, op));
-        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
-        break;
+        return { std::make_shared<Enable_Distributor>(computer, op),
+                std::make_shared<Data_to_Distributor>(computer, op) };
     case Operation::add_to_upper:
     case Operation::subtract_from_upper:
     case Operation::add_to_lower:
@@ -375,41 +423,42 @@ Op_Sequence operation_steps(Computer& computer, Operation op)
     case Operation::reset_and_subtract_into_lower:
     case Operation::reset_and_add_absolute_into_lower:
     case Operation::reset_and_subtract_absolute_into_lower:
-        steps.push_back(std::make_shared<Enable_Distributor>(computer, op));
-        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
-        steps.push_back(std::make_shared<Distributor_to_Accumulator>(computer, op));
-        steps.push_back(std::make_shared<Remove_Interlock_A>(computer, op));
-        break;
+        return { std::make_shared<Enable_Distributor>(computer, op),
+                std::make_shared<Data_to_Distributor>(computer, op),
+                std::make_shared<Distributor_to_Accumulator>(computer, op),
+                std::make_shared<Remove_Interlock_A>(computer, op) };
     case Operation::store_distributor:
-        steps.push_back(std::make_shared<Enable_Position_Set>(computer, op));
-        steps.push_back(std::make_shared<Store_Distributor>(computer, op));
-        break;
+        return { std::make_shared<Enable_Position_Set>(computer, op),
+                std::make_shared<Store_Distributor>(computer, op) };
     case Operation::store_lower_in_memory:
     case Operation::store_upper_in_memory:
-        steps.push_back(std::make_shared<Enable_Distributor>(computer, op));
-        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
-        steps.push_back(std::make_shared<Store_Distributor>(computer, op));
-        break;
+        return { std::make_shared<Enable_Distributor>(computer, op),
+                std::make_shared<Data_to_Distributor>(computer, op),
+                std::make_shared<Store_Distributor>(computer, op) };
     case Operation::store_lower_data_address:
     case Operation::store_lower_instruction_address:
-        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
-        steps.push_back(std::make_shared<Store_Distributor>(computer, op));
-        break;
+        return { std::make_shared<Data_to_Distributor>(computer, op),
+                std::make_shared<Store_Distributor>(computer, op) };
     case Operation::multiply:
-        steps.push_back(std::make_shared<Enable_Distributor>(computer, op));
-        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
-        steps.push_back(std::make_shared<Multiply>(computer, op));
-        steps.push_back(std::make_shared<Remove_Interlock_A>(computer, op));
-        break;
+        return { std::make_shared<Enable_Distributor>(computer, op),
+                std::make_shared<Data_to_Distributor>(computer, op),
+                std::make_shared<Multiply>(computer, op),
+                std::make_shared<Remove_Interlock_A>(computer, op) };
     case Operation::divide:
     case Operation::divide_and_reset_upper:
-        steps.push_back(std::make_shared<Enable_Distributor>(computer, op));
-        steps.push_back(std::make_shared<Data_to_Distributor>(computer, op));
-        steps.push_back(std::make_shared<Divide>(computer, op));
-        steps.push_back(std::make_shared<Remove_Interlock_A>(computer, op));
-        break;
+        return { std::make_shared<Enable_Distributor>(computer, op),
+                std::make_shared<Data_to_Distributor>(computer, op),
+                std::make_shared<Divide>(computer, op),
+                std::make_shared<Remove_Interlock_A>(computer, op) };
+    default:
+    {
+        // Check for branch on 8 in distributor position.
+        int pos = static_cast<int>(op)
+            - static_cast<int>(Operation::branch_on_8_in_distributor_position_10);
+        assert(0 <= pos && pos < 10);
+        return {};
     }
-    return steps;
+    }
 }
 
 /// The initial state is: powered off for long enough that the blower is off.
@@ -418,9 +467,12 @@ Computer::Computer()
       m_can_turn_on(true),
       m_power_on(false),
       m_dc_on(false),
-      m_control_mode(Control_Mode::run), //!TODO make persistent
+      m_programmed_mode(Programmed_Mode::stop),
       m_cycle_mode(Half_Cycle_Mode::run), //!TODO make persistent
+      m_control_mode(Control_Mode::run), //!TODO make persistent
       m_display_mode(Display_Mode::distributor),
+      m_overflow_mode(Overflow_Mode::stop),
+      m_error_mode(Error_Mode::stop),
       m_half_cycle(Half_Cycle::instruction),
       m_run_time(0),
       m_restart(false),
@@ -428,12 +480,7 @@ Computer::Computer()
       m_storage_selection_error(false),
       m_clocking_error(false),
       m_error_sense(false),
-      m_next_instruction_i_steps {
-        std::make_shared<Instruction_to_Program_Register>(*this),
-        std::make_shared<Op_and_Address_to_Registers>(*this) },
-      m_next_instruction_d_steps {
-        std::make_shared<Instruction_Address_to_Address_Register>(*this),
-        std::make_shared<Enable_Program_Register>(*this) }
+      m_error_stop(false)
 {}
 
 void Computer::power_on()
@@ -540,6 +587,11 @@ void Computer::set_display_mode(Display_Mode mode)
     m_display_mode = mode;
 }
 
+void Computer::set_overflow_mode(Overflow_Mode mode)
+{
+    m_overflow_mode = mode;
+}
+
 void Computer::set_error_mode(Error_Mode mode)
 {
     m_error_mode = mode;
@@ -598,8 +650,10 @@ void Computer::program_start()
         {
             std::cerr << "I\n";
             // Load the data address.
-            for (auto next_op_it = m_next_instruction_i_steps.begin();
-                 next_op_it != m_next_instruction_i_steps.end(); )
+            Operation operation = Operation(m_operation_register.value());
+            auto inst_seq = next_instruction_i_steps(*this, operation);
+            for (auto next_op_it = inst_seq.begin();
+                 next_op_it != inst_seq.end(); )
             {
                 // Execute the operation.  Go on to the next operation if this one is done.
                 if ((*next_op_it)->execute())
@@ -620,8 +674,9 @@ void Computer::program_start()
             bool restarted = false;
             auto op_seq = operation_steps(*this, operation);
             auto op_end = op_seq.end();
-            auto next_op_it = m_next_instruction_d_steps.begin();
-            auto inst_end = m_next_instruction_d_steps.end();
+            auto inst_seq = next_instruction_d_steps(*this, operation);
+            auto next_op_it = inst_seq.begin();
+            auto inst_end = inst_seq.end();
             // The operation sequence and the next address sequence may happen in parallel.
             // Loop until both are done.
             for (auto op_it = op_seq.begin(); op_it != op_end || next_op_it != inst_end; )
@@ -645,7 +700,10 @@ void Computer::program_start()
                 m_drum.step();
             }
             //! Don't stop on op=stop if m_programmed_mode is not "stop".
-            if (m_cycle_mode == Half_Cycle_Mode::half || operation == Operation::stop)
+            if (m_cycle_mode == Half_Cycle_Mode::half
+                || operation == Operation::stop
+                || (m_overflow && m_overflow_mode == Overflow_Mode::stop)
+                || m_error_stop)
                 return;
         }
     }

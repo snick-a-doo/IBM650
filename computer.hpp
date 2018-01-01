@@ -83,6 +83,11 @@ public:
         read_in_storage,
         read_out_storage,
     };
+    enum class Overflow_Mode
+    {
+        stop,
+        sense,
+    };
     enum class Error_Mode
     {
         stop,
@@ -108,6 +113,7 @@ public:
     void set_display_mode(Display_Mode mode);
     /// Set the error switch.  When set to "stop", errors halt the program.  When set to
     /// "sense", execution continues with the instruction in the storage-entry switches.
+    void set_overflow_mode(Overflow_Mode mode);
     void set_error_mode(Error_Mode mode);
     /// Set the address switches.  4 digit selectors for the address used for manual operation.
     /// It's also the stop address in the "address stop" control mode.
@@ -205,6 +211,7 @@ private:
     Half_Cycle_Mode m_cycle_mode;
     /// The state of the display switch.
     Display_Mode m_display_mode;
+    Overflow_Mode m_overflow_mode;
     Error_Mode m_error_mode;
     /// The state of the storage entry switches.
     Word m_storage_entry;
@@ -235,6 +242,8 @@ private:
     bool m_storage_selection_error;
     bool m_clocking_error;
     bool m_error_sense;
+    /// True if an error that unconditionally stops the program occurred.
+    bool m_error_stop;
 
     class Drum
     {
@@ -254,13 +263,6 @@ private:
     };
 
     Drum m_drum;
-
-    using Op_Sequence = std::vector<std::shared_ptr<Operation_Step>>;
-    /// The steps for finding and loading the next instruction during the instruction
-    /// half-cycle.
-    const Op_Sequence m_next_instruction_i_steps;
-    /// The steps for finding and loading the next instruction during the data half-cycle.
-    const Op_Sequence m_next_instruction_d_steps;
 
     // Support for multiply and divide loops.
     void add_to_accumulator(const Word& reg, bool to_upper, TDigit& carry);
