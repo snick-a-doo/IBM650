@@ -14,7 +14,6 @@ struct Opcode_Fixture : Computer_Ready_Fixture
                    const Word& lower,
                    const Word& distr)
         {
-            assert(addr.value() > 99);
             Word instr;
             instr.digits()[0] = bin(opcode / 10);
             instr.digits()[1] = bin(opcode % 10);
@@ -39,6 +38,10 @@ struct Opcode_Fixture : Computer_Ready_Fixture
             computer.set_error_mode(Computer::Error_Mode::stop);
             computer.program_reset();
         }
+    Opcode_Fixture(int opcode, const Address& addr,
+                   const Word& upper, const Word& lower, const Word& distr)
+        : Opcode_Fixture(opcode, Word(), addr, upper, lower, distr)
+        {}
     Opcode_Fixture(int opcode, const Address& addr, const Word& distr)
         : Opcode_Fixture(opcode, Word(), addr, Word(), Word(), distr)
         {}
@@ -1959,4 +1962,229 @@ BOOST_AUTO_TEST_CASE(branch_on_8_in_position_2_2)
     BOOST_CHECK(!f.error_stop());
     BOOST_CHECK_EQUAL(f.upper(), upper);
     BOOST_CHECK_EQUAL(f.lower(), lower);
+}
+
+// 30  SRT  Shift Right
+BOOST_AUTO_TEST_CASE(shift_right)
+{
+    Address addr({0,0,0,2});
+    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+    Word lower({1,2, 3,4,5,6, 7,8,9,0, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(30, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({0,0, 1,2,3,4, 5,6,7,8, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({9,0, 1,2,3,4, 5,6,7,8, '+'}));
+}
+
+// 31  SRD  Shift and Round
+BOOST_AUTO_TEST_CASE(shift_and_round_1)
+{
+    Address addr({0,0,0,2});
+    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+    Word lower({1,2, 3,4,5,6, 7,8,9,0, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(31, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({0,0, 1,2,3,4, 5,6,7,8, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({9,0, 1,2,3,4, 5,6,7,9, '+'}));
+}
+
+BOOST_AUTO_TEST_CASE(shift_and_round_2)
+{
+    Address addr({0,0,0,0});
+    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+    Word lower({1,2, 3,4,5,6, 7,8,9,0, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(31, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({1,2, 3,4,5,6, 7,8,9,0, '+'}));
+}
+
+BOOST_AUTO_TEST_CASE(shift_and_round_3)
+{
+    Address addr({0,0,5,5});
+    Word upper({1,2, 3,4,5,6, 7,8,9,0, '-'});
+    Word lower({1,2, 3,4,5,6, 7,8,9,0, '-'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(31, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({0,0, 0,0,0,1, 2,3,4,5, '-'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({6,7, 8,9,0,1, 2,3,4,6, '-'}));
+}
+
+// 35  SLT  Shift Left
+BOOST_AUTO_TEST_CASE(shift_left)
+{
+    Address addr({0,0,0,6});
+    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+    Word lower({1,2, 3,4,5,6, 7,8,9,0, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(35, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({7,8, 9,0,1,2, 3,4,5,6, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({7,8, 9,0,0,0, 0,0,0,0, '+'}));
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+// 36  SCT  Shift Left and Count
+BOOST_AUTO_TEST_CASE(shift_left_and_count_1)
+{
+    Address addr({0,0,0,0});
+    Word upper({0,0, 0,0,0,1, 2,3,4,5, '+'});
+    Word lower({2,2, 2,2,2,5, 5,5,5,5, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(36, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,2, 2,2,2,2, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({5,5, 5,5,5,0, 0,0,0,5, '+'}));
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(shift_left_and_count_2)
+{
+    Address addr({0,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower({1,2, 3,4,5,2, 2,2,2,2, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(36, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,2, 2,2,2,2, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({0,0, 0,0,0,0, 0,0,1,0, '+'}));
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(shift_left_and_count_3)
+{
+    Address addr({0,0,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower({0,0, 1,2,3,4, 5,2,2,2, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(36, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({0,0, 1,2,3,4, 5,2,2,2, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({0,0, 0,0,0,0, 0,0,1,0, '+'}));
+    BOOST_CHECK(f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(shift_left_and_count_4)
+{
+    Address addr({0,0,0,0});
+    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+    Word lower({2,2, 2,2,2,5, 5,5,5,5, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(36, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,6, 7,8,9,0, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({2,2, 2,2,2,5, 5,5,0,0, '+'}));
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(shift_left_and_count_5)
+{
+    Address addr({0,0,0,0});
+    Word upper({0,1, 2,3,4,5, 6,7,8,9, '+'});
+    Word lower({2,2, 2,2,2,5, 5,5,5,5, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(36, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,6, 7,8,9,2, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({2,2, 2,2,5,5, 5,5,0,1, '+'}));
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(shift_left_and_count_6)
+{
+    Address addr({0,0,0,6});
+    Word upper({0,0, 0,0,1,2, 3,4,5,6, '+'});
+    Word lower({2,2, 2,2,2,5, 5,5,5,5, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(36, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,6, 2,2,2,2, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({2,5, 5,5,5,5, 0,0,0,8, '+'}));
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(shift_left_and_count_7)
+{
+    Address addr({0,0,0,6});
+    Word upper({0,0, 0,0,0,0, 1,2,3,4, '+'});
+    Word lower({2,2, 2,2,2,5, 5,5,5,5, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(36, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,2,2, 2,2,2,5, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({5,5, 5,5,0,0, 0,0,1,0, '+'}));
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(shift_left_and_count_8)
+{
+    Address addr({0,0,0,6});
+    Word upper({0,0, 0,0,0,0, 0,1,2,3, '+'});
+    Word lower({2,2, 2,2,2,5, 5,5,5,5, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(36, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({0,1, 2,3,2,2, 2,2,2,5, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({5,5, 5,5,0,0, 0,0,1,0, '+'}));
+    BOOST_CHECK(f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(shift_left_and_count_9)
+{
+    Address addr({0,0,0,6});
+    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+    Word lower({2,2, 2,2,2,5, 5,5,5,5, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(36, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,6, 7,8,9,0, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({2,2, 2,2,2,5, 5,5,0,0, '+'}));
+    BOOST_CHECK(!f.computer.overflow());
+}
+
+BOOST_AUTO_TEST_CASE(shift_left_and_count_10)
+{
+    Address addr({0,0,0,6});
+    Word upper({0,1, 2,3,4,5, 6,7,8,9, '+'});
+    Word lower({2,2, 2,2,2,5, 5,5,5,5, '+'});
+    Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+    Opcode_Fixture f(36, addr, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,6, 7,8,9,2, '+'}));
+    BOOST_CHECK_EQUAL(f.lower(), Word({2,2, 2,2,5,5, 5,5,0,5, '+'}));
+    BOOST_CHECK(!f.computer.overflow());
 }

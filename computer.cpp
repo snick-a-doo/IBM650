@@ -18,6 +18,8 @@ const Address lower_accumulator_address({8,0,0,2});
 const Address upper_accumulator_address({8,0,0,3});
 
 const Word zero({0,0, 0,0,0,0, 0,0,0,0, '+'});
+const Word five({0,0, 0,0,0,0, 0,0,0,5, '+'});
+const Word negative_five({0,0, 0,0,0,0, 0,0,0,5, '-'});
 
 enum class Operation
 {
@@ -38,6 +40,11 @@ enum class Operation
     store_lower_data_address = 22,
     store_lower_instruction_address = 23,
     store_distributor = 24,
+
+    shift_right = 30,
+    shift_and_round = 31,
+    shift_left = 35,
+    shift_left_and_count = 36,
 
     branch_on_nonzero_in_upper = 44,
     branch_on_nonzero = 45,
@@ -124,8 +131,8 @@ OPERATION_STEP(Instruction_Address_to_Address_Register,
         // position 10 is 90; the others are 90 + position.
         int pos = static_cast<int>(op)
             - static_cast<int>(Operation::branch_on_8_in_distributor_position_10);        
-        pos = pos == 0 ? 10 : pos;
-        if (0 < pos && pos <= 10)
+        pos = pos == 0 ? word_size : pos;
+        if (0 < pos && pos <= word_size)
         {
             TDigit digit = dec(c.m_distributor[pos]);
             branch = digit == 8;
@@ -293,7 +300,7 @@ public:
         {
             // Record the high digit and shift left.
             m_upper_overflow = dec(c.m_upper_accumulator[word_size]);
-            c.shift_accumulator();
+            c.shift_accumulator(1);
             ++m_shift_count;
             return false;
         }
@@ -331,7 +338,7 @@ public:
         {
             // Record the high digit and shift left.
             m_upper_overflow = dec(c.m_upper_accumulator[word_size]);
-            c.shift_accumulator();
+            c.shift_accumulator(1);
             ++m_shift_count;
             m_shift = false;
             return false;
@@ -379,6 +386,72 @@ private:
     TDigit m_upper_overflow = 0;
     std::size_t m_shift_count = 0;
     bool m_shift = true;
+};
+
+OPERATION_STEP(Enable_Shift_Control,
+{
+    std::cerr << "Enable shift control\n";
+    // 1 word time + 1 if odd time
+    return c.m_run_time % 2 == 0;
+})
+
+class Shift : public Operation_Step
+{
+public:
+    Shift(Computer& computer, Operation op)
+        : Operation_Step(computer, op),
+          m_shift_count(base - dec(c.m_address_register[0]))
+        {
+            // The shift count starts at the complement of the address's units digit and counts
+            // up to 10.  For shift and count, shifting may stop before we get to 10.  Whatever
+            // we get to is what goes into the lower accumulator.
+            if (m_shift_count == base)
+                m_shift_count = 0;
+            if (op == Operation::shift_left_and_count && dec(c.m_upper_accumulator[word_size]) > 0)
+                m_shift_count = 0;
+        }
+
+    virtual bool execute() override {
+        if (op == Operation::shift_left_and_count
+            && (dec(c.m_upper_accumulator[word_size]) > 0
+                || m_shift_count == base))
+        {
+            // Put the shift count in the zeroes shifted into the lower accumulator.  If no
+            // shifting took place, insert zeroes.
+            c.m_lower_accumulator[1] = bin(m_shift_count % base);
+            c.m_lower_accumulator[2] = bin(m_shift_count / base);
+            c.m_overflow = dec(c.m_upper_accumulator[word_size]) == 0;
+            return true;
+        }
+
+        ++m_shift_count;
+
+        switch (op)
+        {
+        case Operation::shift_right:
+        case Operation::shift_and_round:
+            c.shift_accumulator(-1);
+            break;
+        case Operation::shift_left:
+        case Operation::shift_left_and_count:
+            c.shift_accumulator(1);
+            break;
+        }
+
+        if (op == Operation::shift_and_round && m_shift_count == 9)
+        {
+            // Round by adding 5 to the last digit to be shifted off.  Subtract five if the
+            // accumulator sign is negative (round away from zero).
+            TDigit carry;
+            c.add_to_accumulator(c.m_lower_accumulator.sign() == '-' ? negative_five : five,
+                                 false, carry);
+        }
+
+        return op != Operation::shift_left_and_count && m_shift_count == base;
+    }
+        
+private:
+    std::size_t m_shift_count;
 };
 }
 
@@ -450,12 +523,19 @@ Op_Sequence operation_steps(Computer& computer, Operation op)
                 std::make_shared<Data_to_Distributor>(computer, op),
                 std::make_shared<Divide>(computer, op),
                 std::make_shared<Remove_Interlock_A>(computer, op) };
+    case Operation::shift_right:
+    case Operation::shift_and_round:
+    case Operation::shift_left:
+    case Operation::shift_left_and_count:
+        return { std::make_shared<Enable_Shift_Control>(computer, op),
+                std::make_shared<Shift>(computer, op),
+                std::make_shared<Remove_Interlock_A>(computer, op) };
     default:
     {
         // Check for branch on 8 in distributor position.
         int pos = static_cast<int>(op)
             - static_cast<int>(Operation::branch_on_8_in_distributor_position_10);
-        assert(0 <= pos && pos < 10);
+        assert(0 <= pos && pos < word_size);
         return {};
     }
     }
@@ -877,12 +957,12 @@ void Computer::add_to_accumulator(const Word& reg, bool to_upper, TDigit& carry)
     m_lower_accumulator.load(accum, word_size, 0);
 }
 
-void Computer::shift_accumulator()
+void Computer::shift_accumulator(int n_places_left)
 {
     Signed_Register<2*word_size> accum;
     accum.load(m_upper_accumulator, 0, 0);
     accum.load(m_lower_accumulator, 0, word_size);
-    accum = shift(accum, 1);
+    accum = shift(accum, n_places_left);
     TDigit sign = m_upper_accumulator[0];
     m_upper_accumulator.load(accum, 0, 0);
     m_upper_accumulator[0] = sign;

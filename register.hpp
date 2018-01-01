@@ -12,8 +12,9 @@ namespace IBM650
 {
     using TDigit = char;
 
+    constexpr TDigit base = 10;
     /// An array of ASCII characters that have the bi-quinary bit patterns for 0, 1, ..., 9.
-    constexpr std::array<TDigit, 10> bi_quinary_code {'!','\"','$','(','0','A','B','D','H','P'};
+    constexpr std::array<TDigit, base> bi_quinary_code {'!','\"','$','(','0','A','B','D','H','P'};
 
     /// @Return the bi-quinary code for a given integer.  If number is '_' return 0 (no bits).
     /// Since, signs are encoded as digits, return 8 for '-', 9 for '+'.
@@ -141,7 +142,7 @@ namespace IBM650
         static_assert(N < std::numeric_limits<TValue>::digits10);
         TValue total = 0;
         for (auto digit : m_digits)
-            total = 10*total + dec(digit);
+            total = base*total + dec(digit);
         return total;
     }
 
@@ -173,14 +174,14 @@ namespace IBM650
     TDigit& Register<N>::operator[](std::size_t n)
     {
         assert(0 < n <= N);
-        return m_digits[N-n];
+        return m_digits[N-n-1];
     }
 
     template <std::size_t N>
     const TDigit& Register<N>::operator[](std::size_t n) const
     {
         assert(0 < n <= N);
-        return m_digits[N-n];
+        return m_digits[N-n-1];
     }
 
     /// A register with an extra digit to represent the sign.
@@ -301,7 +302,7 @@ namespace IBM650
                 sum[N-i] = l - r;
                 if (l < r)
                 {
-                    sum[N-i] += 10;
+                    sum[N-i] += base;
                     carry = 1;
                 }
             }
@@ -312,8 +313,8 @@ namespace IBM650
             for (std::size_t i = 1; i <= N; ++i)
             {
                 auto digit = carry + dec(lhs[i]) + dec(rhs[i]);
-                sum[N-i] = digit % 10;
-                carry = digit/10;
+                sum[N-i] = digit % base;
+                carry = digit/base;
             }
             sum[N] = lhs.sign();
         }
@@ -341,7 +342,7 @@ namespace std
         for (std::size_t i = 0; i < N; ++i)
         {
             auto d = IBM650::dec(reg.digits()[i]);
-            os << static_cast<char>(d < 10 ? d + '0' : d);
+            os << static_cast<char>(d < IBM650::base ? d + '0' : d);
         }
     }
 }

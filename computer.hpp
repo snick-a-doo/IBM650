@@ -29,6 +29,8 @@ class Computer
     friend class Store_Distributor;
     friend class Multiply;
     friend class Divide;
+    friend class Enable_Shift_Control;
+    friend class Shift;
 
 public:
     Computer();
@@ -266,7 +268,7 @@ private:
 
     // Support for multiply and divide loops.
     void add_to_accumulator(const Word& reg, bool to_upper, TDigit& carry);
-    void shift_accumulator();
+    void shift_accumulator(int n_places_left);
 };
 
 }
