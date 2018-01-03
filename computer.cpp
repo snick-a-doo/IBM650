@@ -61,6 +61,8 @@ enum class Operation
 
     load_distributor = 69,
 
+    table_lookup = 84,
+
     branch_on_8_in_distributor_position_10 = 90
 };
 
@@ -453,6 +455,58 @@ public:
 private:
     std::size_t m_shift_count;
 };
+
+class Look_Up_Address : public Operation_Step
+{
+public:
+    Look_Up_Address(Computer& computer, Operation op)
+        : Operation_Step(computer, op),
+          m_address(computer.m_address_register),
+          m_offset(dec(m_address[0]))
+        {
+            // Truncate the address to a multiple of 50 to get the address at the start of the
+            // band.
+            m_address[0] = bin(0);
+            TDigit tens = dec(m_address[1]);
+            TDigit trunc_tens = tens > 4 ? 5 : 0;
+            m_address[1] = bin(trunc_tens);
+            m_offset += 10*(tens - trunc_tens);
+        }
+
+    virtual bool execute() override {
+        if (!c.m_drum.is_at_head(m_address))
+            return false;
+
+        if (c.m_drum.index() == 48 || c.m_drum.index() == 49
+            || less(c.get_storage(m_address), c.m_distributor))
+        {
+            ++m_address;
+            ++c.m_address_register;
+            return false;
+        }
+        return true;
+    }
+
+private:
+    Address m_address;
+    int m_offset;
+};
+
+OPERATION_STEP(Address_to_Program_Register,
+{
+    // The timing chart in the manual includes "Add to PR", in TLU after the argument is found.
+    // Addition doesn't make sense because the adder operates on the accumulator.  "Add" could
+    // be mean "address", but the PR gets input from accumulator, distributor, or drum, not the
+    // address register.  I don't know why the PR would need the address since the only thing
+    // it can do with it is put it in the address register.
+    return true;
+})
+
+OPERATION_STEP(Insert_Address_in_Lower,
+{
+    c.m_lower_accumulator.load(c.m_address_register, 0, 2);
+    return true;
+})
 }
 
 using Op_Sequence = std::vector<std::shared_ptr<Operation_Step>>;
@@ -530,6 +584,11 @@ Op_Sequence operation_steps(Computer& computer, Operation op)
         return { std::make_shared<Enable_Shift_Control>(computer, op),
                 std::make_shared<Shift>(computer, op),
                 std::make_shared<Remove_Interlock_A>(computer, op) };
+    case Operation::table_lookup:
+        return { std::make_shared<Enable_Position_Set>(computer, op),
+                std::make_shared<Look_Up_Address>(computer, op),
+                std::make_shared<Address_to_Program_Register>(computer, op),
+                std::make_shared<Insert_Address_in_Lower>(computer, op) };
     default:
     {
         // Check for branch on 8 in distributor position.
@@ -1037,4 +1096,9 @@ void Computer::Drum::write(const Address& address, const Word& word)
 {
     assert(address.value() < m_capacity);
     m_storage[address.value()] = word;
+}
+
+std::size_t Computer::Drum::index() const
+{
+    return m_index;
 }

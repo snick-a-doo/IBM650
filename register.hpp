@@ -67,6 +67,8 @@ namespace IBM650
         virtual TDigit& operator[](std::size_t n);
         virtual const TDigit& operator[](std::size_t n) const;
 
+        Register<N>& operator++();
+
     private:
         /// The contents of the register as bi-quinary codes.
         std::array<TDigit, N> m_digits;
@@ -182,6 +184,19 @@ namespace IBM650
     {
         assert(0 < n <= N);
         return m_digits[N-n-1];
+    }
+
+    template <std::size_t N>
+    Register<N>& Register<N>::operator++()
+    {
+        TDigit carry = 1;
+        for (auto it = m_digits.rbegin(); it != m_digits.rend() && carry == 1; ++it)
+        {
+            TDigit n = dec(*it) + 1;
+            *it = bin(n % base);
+            carry = n / base;
+        }
+        return *this;
     }
 
     /// A register with an extra digit to represent the sign.
@@ -331,6 +346,18 @@ namespace IBM650
             }
         }
         return Signed_Register<N>(sum);
+    }
+
+    template <std::size_t N>
+    bool less(const Signed_Register<N>& lhs, const Signed_Register<N>& rhs)
+    {
+        bool is_less = true;
+        auto itl = lhs.digits().begin() + 1;
+        auto itr = rhs.digits().begin() + 1;
+        for ( ; itl != lhs.digits().end() && itr != rhs.digits().end(); ++itl, ++itr)
+            if (*itl != *itr)
+                return *itl < *itr;
+        return false;
     }
 }
 

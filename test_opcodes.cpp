@@ -2188,3 +2188,88 @@ BOOST_AUTO_TEST_CASE(shift_left_and_count_10)
     BOOST_CHECK_EQUAL(f.lower(), Word({2,2, 2,2,5,5, 5,5,0,5, '+'}));
     BOOST_CHECK(!f.computer.overflow());
 }
+
+
+struct Table_Fixture : public Opcode_Fixture
+{
+    Table_Fixture(const Address& addr,
+                  Word value,
+                  const Word& upper,
+                  const Word& lower,
+                  const Word& distr)
+        : Opcode_Fixture(84, Word(), addr, upper, lower, distr)
+        {
+            Word one_hundred({0,0, 0,0,0,0, 0,1,0,0, '+'});
+            // Fill addresses 0200 to 0247 with values starting at value and incrementing by
+            // 100.
+            for (Address addr = Address({0,2,0,0}); addr != Address({0,2,6,0}); ++addr)
+            {
+                TDigit carry;
+                computer.set_drum(addr, value);
+                value = add(value, one_hundred, carry);
+            }
+        }
+};
+
+// 84  TLU  Table Lookup
+BOOST_AUTO_TEST_CASE(table_lookup_1)
+{
+    Address addr({0,2,0,0});
+    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+    Word lower({6,5, 0,0,0,0, 0,5,5,4, '+'});
+    Word distr({8,3, 6,5,8,2, 8,3,0,0, '+'});
+    Word start({8,3, 6,5,8,2, 4,3,0,0, '+'});
+
+    Table_Fixture f(addr, start, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), upper);
+    BOOST_CHECK_EQUAL(f.lower(), Word({6,5, 0,2,4,0, 0,5,5,4, '+'}));
+}
+
+BOOST_AUTO_TEST_CASE(table_lookup_2)
+{
+    Address addr({0,2,1,5});
+    Word upper({0,0, 0,0,0,1, 2,3,4,5, '+'});
+    Word lower({6,5, 0,0,0,0, 0,5,5,4, '+'});
+    Word distr({8,3, 6,5,8,2, 8,3,0,0, '+'});
+    Word start({8,3, 6,5,8,2, 4,3,0,0, '+'});
+
+    Table_Fixture f(addr, start, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), upper);
+    BOOST_CHECK_EQUAL(f.lower(), Word({6,5, 0,2,5,5, 0,5,5,4, '+'}));
+}
+
+BOOST_AUTO_TEST_CASE(table_lookup_3)
+{
+    Address addr({0,2,1,5});
+    Word upper({0,0, 0,0,0,1, 2,3,4,5, '+'});
+    Word lower({6,5, 0,0,0,0, 0,5,5,4, '+'});
+    Word distr({8,3, 6,5,8,2, 8,3,2,1, '+'});
+    Word start({8,3, 6,5,8,2, 4,3,0,0, '+'});
+
+    Table_Fixture f(addr, start, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), upper);
+    // Distributor is not an exact match, get the next higher address.
+    BOOST_CHECK_EQUAL(f.lower(), Word({6,5, 0,2,5,6, 0,5,5,4, '+'}));
+}
+
+BOOST_AUTO_TEST_CASE(table_lookup_4)
+{
+    Address addr({0,2,0,0});
+    Word upper({0,0, 0,0,0,1, 2,3,4,5, '+'});
+    Word lower({6,5, 0,0,0,0, 0,5,5,4, '+'});
+    Word distr({8,3, 6,5,8,2, 9,1,0,0, '+'});
+    Word start({8,3, 6,5,8,2, 4,3,0,0, '+'});
+
+    Table_Fixture f(addr, start, upper, lower, distr);
+    f.run();
+    BOOST_CHECK_EQUAL(f.distributor(), distr);
+    BOOST_CHECK_EQUAL(f.upper(), upper);
+    // Can't match at address 0248 or 0249.
+    BOOST_CHECK_EQUAL(f.lower(), Word({6,5, 0,2,5,0, 0,5,5,4, '+'}));
+}

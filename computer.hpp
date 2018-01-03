@@ -31,6 +31,9 @@ class Computer
     friend class Divide;
     friend class Enable_Shift_Control;
     friend class Shift;
+    friend class Look_Up_Address;
+    friend class Address_to_Program_Register;
+    friend class Insert_Address_in_Lower;
 
 public:
     Computer();
@@ -255,6 +258,7 @@ private:
         bool is_at_head(const Address& address) const;
         Word read(const Address& address) const;
         void write(const Address& address, const Word& word);
+        std::size_t index() const;
     private:
         /// The number of words that can be stored on the drum.
         constexpr static size_t m_capacity = 2000;
