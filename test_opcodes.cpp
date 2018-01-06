@@ -2189,7 +2189,6 @@ BOOST_AUTO_TEST_CASE(shift_left_and_count_10)
     BOOST_CHECK(!f.computer.overflow());
 }
 
-
 struct Table_Fixture : public Opcode_Fixture
 {
     Table_Fixture(const Address& addr,

@@ -14,11 +14,16 @@ namespace IBM650
     constexpr std::size_t word_size = 10;
     using UWord = Register<word_size>;
     using Word = Signed_Register<word_size>;
+    /// The number of words in a band on the drum.
+    constexpr std::size_t band_size = 50;
+    /// The number of bands on the drum.  Each band holds band_size words.
+    constexpr static size_t n_bands = 40;
 
     class Operation_Step;
 
 class Computer
 {
+    // Give access to operation steps.
     friend class Instruction_to_Program_Register;
     friend class Op_and_Address_to_Registers;
     friend class Instruction_Address_to_Address_Register;
@@ -252,18 +257,21 @@ private:
 
     class Drum
     {
+#ifdef TEST
+        friend class Computer;
+#endif
     public:
+        /// Rotate the drum by one word.
         void step();
-        bool is_address(const Address& address) const;
-        bool is_at_head(const Address& address) const;
-        Word read(const Address& address) const;
-        void write(const Address& address, const Word& word);
+        /// @Return the word at the read head in the passed-in band.
+        Word read(std::size_t band) const;
+        /// Set the word at the read head in the passed-in band.
+        void write(std::size_t band, const Word& word);
+        /// @Return the drum index.  Used to see if an address is at the read head.
         std::size_t index() const;
     private:
-        /// The number of words that can be stored on the drum.
-        constexpr static size_t m_capacity = 2000;
         /// The words stored on the drum.
-        std::array<Word, m_capacity> m_storage;
+        std::array<std::array<Word, band_size>, n_bands> m_storage;
         /// The drum position, 0-49.  Determines which addresses are at the read head.
         std::size_t m_index = 0;
     };

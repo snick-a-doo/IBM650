@@ -110,11 +110,11 @@ BOOST_AUTO_TEST_CASE(transfer)
     BOOST_CHECK_EQUAL(f.computer.address_register(), Address({1,2,3,4}));
 }
 
-struct Reset_Fixture : public Drum_Storage_Fixture
+struct Reset_Fixture : public Computer_Ready_Fixture
 {
     Reset_Fixture() {
-        // Set the address switches and the distributor by side effect.
-        store(Address({1,2,3,4}), Word({3,10, 3,2,3,3, 3,4,3,5, '-'}));
+        computer.set_address(Address({1,2,3,4}));
+        computer.set_distributor(Word({3,10, 3,2,3,3, 3,4,3,5, '-'}));
         computer.set_upper(Word({10,1, 1,2,1,3, 1,4,1,5, '+'}));
         computer.set_lower(Word({2,1, 2,2,2,3, 2,4,2,5, '+'}));
         computer.set_program_register(Word({1,2, 3,4,5,6, 7,8,9,10, '+'}));
@@ -282,25 +282,40 @@ BOOST_AUTO_TEST_CASE(storage_entry)
     Word zero({0,0, 0,0,0,0, 0,0,0,0, '+'});
     Address zero_addr({0,5,1,3});
 
-    Drum_Storage_Fixture f;
-    f.store(word_addr, word);
-    f.store(zero_addr, zero);
-    f.computer.set_control_mode(Computer::Control_Mode::manual);
-
+    Computer_Ready_Fixture f;
     // See operator's manual p.55 "Examples of Use of the Control Console"
+    f.computer.set_storage_entry(word);
+    f.computer.set_address(word_addr);
+    f.computer.set_control_mode(IBM650::Computer::Control_Mode::manual);
+    f.computer.set_display_mode(IBM650::Computer::Display_Mode::read_in_storage);
+    f.computer.program_reset();
+    f.computer.transfer();
+    f.computer.program_start();
+    f.computer.set_display_mode(Computer::Display_Mode::distributor);
+    BOOST_CHECK_EQUAL(f.computer.display(), word);
+
+    f.computer.set_storage_entry(zero);
+    f.computer.set_address(zero_addr);
+    f.computer.set_display_mode(IBM650::Computer::Display_Mode::read_in_storage);
+    f.computer.program_reset();
+    f.computer.transfer();
+    f.computer.program_start();
+    f.computer.set_display_mode(Computer::Display_Mode::distributor);
+    BOOST_CHECK_EQUAL(f.computer.display(), zero);
+
     f.computer.set_address(word_addr);
     f.computer.set_display_mode(Computer::Display_Mode::read_out_storage);
     f.computer.program_reset();
     f.computer.transfer();
     f.computer.program_start();
-    BOOST_CHECK(f.computer.display() == word);
+    BOOST_CHECK_EQUAL(f.computer.display(), word);
 
     f.computer.set_address(zero_addr);
     f.computer.set_display_mode(Computer::Display_Mode::read_out_storage);
     f.computer.program_reset();
     f.computer.transfer();
     f.computer.program_start();
-    BOOST_CHECK(f.computer.display() == zero);
+    BOOST_CHECK_EQUAL(f.computer.display(), zero);
 }
 
 BOOST_AUTO_TEST_CASE(accumulator_entry)
@@ -308,10 +323,17 @@ BOOST_AUTO_TEST_CASE(accumulator_entry)
     Word word({1,2, 1,2,3,4, 2,4,6,8, '-'});
     Address word_addr({0,5,1,2});
 
-    Drum_Storage_Fixture f;
-    f.store(word_addr, word);
-    f.computer.set_display_mode(Computer::Display_Mode::distributor);
-    BOOST_CHECK_EQUAL(f.computer.display(), word);
+    Computer_Ready_Fixture f;
+    f.computer.set_storage_entry(word);
+    f.computer.set_address(word_addr);
+    f.computer.set_control_mode(IBM650::Computer::Control_Mode::manual);
+    f.computer.set_display_mode(IBM650::Computer::Display_Mode::read_in_storage);
+    f.computer.program_reset();
+    f.computer.transfer();
+    f.computer.program_start();
+
+    // f.computer.set_display_mode(Computer::Display_Mode::distributor);
+    // BOOST_CHECK_EQUAL(f.computer.display(), word);
 
     // op 65 is "reset add lower".
     f.computer.set_storage_entry(Word({6,5, 0,5,1,2, 0,0,0,0, '+'}));
@@ -320,9 +342,9 @@ BOOST_AUTO_TEST_CASE(accumulator_entry)
     BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
     BOOST_CHECK_EQUAL(f.computer.address_register(), word_addr);
     // The I-half-cycle is ready to be executed.
+    f.computer.program_reset();
     BOOST_CHECK(!f.computer.data_address());
     BOOST_CHECK(f.computer.instruction_address());
-    f.computer.program_reset();
     f.computer.program_start();
 
     // The 1st half-cycle loads the program register from the storage-entry switches.
@@ -377,11 +399,11 @@ BOOST_AUTO_TEST_CASE(start_program)
     // Assuming that the sign is not displayed with the upper accumulator.
     Word data_display({0,0, 0,0,0,1, 7,1,7,1, '_'});
 
-    Drum_Storage_Fixture f;
-    f.store(addr1, instr1);
-    f.store(addr2, instr2);
-    f.store(addr3, instr3);
-    f.store(data_addr, data);
+    Computer_Ready_Fixture f;
+    f.computer.set_drum(addr1, instr1);
+    f.computer.set_drum(addr2, instr2);
+    f.computer.set_drum(addr3, instr3);
+    f.computer.set_drum(data_addr, data);
     // Make the program stop on "program stop".
     f.computer.set_programmed_mode(Computer::Programmed_Mode::stop);
     f.computer.set_control_mode(Computer::Control_Mode::run);
@@ -400,9 +422,9 @@ struct LD_Fixture : public Run_Fixture
           STOP({0,1, 0,0,0,0, 0,0,0,0, '+'}),
           data({0,0, 0,1,1,2, 2,3,3,4, '-'})
         {
-            store(Address({0,0,0,0}), LD);
-            store(Address({0,0,0,1}), STOP);
-            store(Address({0,1,0,0}), data);
+            computer.set_drum(Address({0,0,0,0}), LD);
+            computer.set_drum(Address({0,0,0,1}), STOP);
+            computer.set_drum(Address({0,1,0,0}), data);
             computer.set_storage_entry(Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
             computer.set_display_mode(Computer::Display_Mode::distributor);
         }
@@ -473,9 +495,9 @@ struct Optimum_LD_Fixture : public Run_Fixture
           STOP({0,1, 0,0,0,0, 0,0,0,0, '+'}),
           data({0,0, 0,1,1,2, 2,3,3,4, '-'})
         {
-            store(Address({0,0,0,5}), LD);
-            store(Address({0,0,6,1}), STOP);
-            store(Address({0,1,0,8}), data);
+            computer.set_drum(Address({0,0,0,5}), LD);
+            computer.set_drum(Address({0,0,6,1}), STOP);
+            computer.set_drum(Address({0,1,0,8}), data);
             computer.set_storage_entry(Word({0,0, 0,0,0,0, 0,0,0,5, '+'}));
             computer.set_display_mode(Computer::Display_Mode::distributor);
         }
@@ -523,9 +545,9 @@ struct RAL_Fixture : public Run_Fixture
           STOP({0,1, 0,0,0,0, 0,0,0,0, '+'}),
           data({0,0, 0,1,1,2, 2,3,3,4, '-'})
         {
-            store(Address({0,0,0,0}), RAL);
-            store(Address({0,0,0,1}), STOP);
-            store(Address({0,1,0,0}), data);
+            computer.set_drum(Address({0,0,0,0}), RAL);
+            computer.set_drum(Address({0,0,0,1}), STOP);
+            computer.set_drum(Address({0,1,0,0}), data);
             computer.set_storage_entry(Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
             computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
         }
@@ -576,9 +598,9 @@ struct Optimum_RAL_Fixture : public Run_Fixture
           STOP({0,1, 0,0,0,0, 0,0,0,0, '+'}),
           data({0,0, 0,1,1,2, 2,3,3,4, '-'})
         {
-            store(Address({0,0,0,5}), RAL);
-            store(Address({0,0,1,3}), STOP);
-            store(Address({1,1,5,8}), data);
+            computer.set_drum(Address({0,0,0,5}), RAL);
+            computer.set_drum(Address({0,0,1,3}), STOP);
+            computer.set_drum(Address({1,1,5,8}), data);
             computer.set_storage_entry(Word({0,0, 0,0,0,0, 0,0,0,5, '+'}));
             computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
         }

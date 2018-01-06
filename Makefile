@@ -12,7 +12,7 @@ ede_FILES=Project.ede Makefile
 
 test_SOURCES=computer.cpp register.cpp test_computer.cpp test_opcodes.cpp test.cpp
 test_OBJ= computer.o register.o test_computer.o test_opcodes.cpp test.o
-CXX= g++ -g
+CXX= g++ -g -Wall
 CXX_COMPILE=$(CXX) $(DEFS) $(INCLUDES) $(CPPFLAGS) $(CFLAGS)
 CXX_DEPENDENCIES=-Wp,-MD,.deps/$(*F).P
 CXX_LINK=$(CXX) $(CFLAGS) $(LDFLAGS) -L.

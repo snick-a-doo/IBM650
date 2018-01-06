@@ -66,12 +66,15 @@ enum class Operation
     branch_on_8_in_distributor_position_10 = 90
 };
 
-#define OPERATION_STEP(name, body)                                      \
-    class name : public Operation_Step {                                \
-    public:                                                             \
-    name(Computer& computer, Operation op) : Operation_Step(computer, op) {}; \
-    virtual bool execute() override body                                \
-};
+std::size_t band_of_address(const Address& addr)
+{
+    return addr.value() / band_size;
+}
+
+std::size_t index_of_address(const Address& addr)
+{
+    return addr.value() % band_size;
+}
 
 class Operation_Step
 {
@@ -86,11 +89,18 @@ protected:
     Operation op;
 };
 
+#define OPERATION_STEP(name, body)                                      \
+    class name : public Operation_Step {                                \
+    public:                                                             \
+    name(Computer& computer, Operation op) : Operation_Step(computer, op) {}; \
+    virtual bool execute() override body                                \
+};
+
 OPERATION_STEP(Instruction_to_Program_Register,
 {
     std::cerr << "I to P addr:=" << c.m_address_register << std::endl;
-    TValue addr = c.m_address_register.value();
-    if (addr >= 8000 || c.m_drum.is_at_head(c.m_address_register))
+    if (c.m_address_register.value() >= 8000
+        || index_of_address(c.m_address_register) == c.m_drum.index())
     {
         c.m_program_register.load(c.get_storage(c.m_address_register), 0, 0);
         std::cerr << "I to PR: PR=" << c.m_program_register << std::endl;
@@ -131,7 +141,7 @@ OPERATION_STEP(Instruction_Address_to_Address_Register,
     {
         // Positions are counted from least significant to most significant.  The opcode for
         // position 10 is 90; the others are 90 + position.
-        int pos = static_cast<int>(op)
+        std::size_t pos = static_cast<int>(op)
             - static_cast<int>(Operation::branch_on_8_in_distributor_position_10);        
         pos = pos == 0 ? word_size : pos;
         if (0 < pos && pos <= word_size)
@@ -161,6 +171,7 @@ OPERATION_STEP(Enable_Distributor, { return true; });
 
 OPERATION_STEP(Data_to_Distributor,
 {
+    std::cerr << c.m_run_time << " Data to Dist\n";
     Address addr;
     switch (op)
     {
@@ -178,11 +189,15 @@ OPERATION_STEP(Data_to_Distributor,
     case Operation::store_upper_in_memory:
         c.m_distributor = c.m_upper_accumulator;
         return true;
+    default:
+        break;
     }
 
-    if (c.m_drum.is_at_head(c.m_address_register))
+    std::cerr << "  addr=" << c.m_address_register << std::endl;
+    if (index_of_address(c.m_address_register) == c.m_drum.index())
     {
         c.m_distributor = c.get_storage(c.m_address_register);
+        std::cerr << "  dist=" << c.m_distributor << std::endl;
         return true;
     }
     return false;
@@ -270,12 +285,12 @@ OPERATION_STEP(Store_Distributor,
     std::cerr << c.m_run_time << " store dist: addr=" << c.m_address_register
               << " dist=" << c.m_distributor << std::endl;
 
-    if (!c.m_drum.is_address(c.m_address_register))
+    if (band_of_address(c.m_address_register) >= n_bands)
     {
         c.m_storage_selection_error = true;
         return true;
     }
-    if (c.m_drum.is_at_head(c.m_address_register))
+    if (index_of_address(c.m_address_register) == c.m_drum.index())
     {
         c.set_storage(c.m_address_register, c.m_distributor);
         return true;
@@ -438,6 +453,8 @@ public:
         case Operation::shift_left_and_count:
             c.shift_accumulator(1);
             break;
+        default:
+            break;
         }
 
         if (op == Operation::shift_and_round && m_shift_count == 9)
@@ -461,26 +478,18 @@ class Look_Up_Address : public Operation_Step
 public:
     Look_Up_Address(Computer& computer, Operation op)
         : Operation_Step(computer, op),
-          m_address(computer.m_address_register),
-          m_offset(dec(m_address[0]))
-        {
-            // Truncate the address to a multiple of 50 to get the address at the start of the
-            // band.
-            m_address[0] = bin(0);
-            TDigit tens = dec(m_address[1]);
-            TDigit trunc_tens = tens > 4 ? 5 : 0;
-            m_address[1] = bin(trunc_tens);
-            m_offset += 10*(tens - trunc_tens);
-        }
+          m_band(-1)
+        {}
 
     virtual bool execute() override {
-        if (!c.m_drum.is_at_head(m_address))
+        if (c.m_drum.index() == 0)
+            m_band = band_of_address(c.m_address_register);
+        if (m_band < 0)
             return false;
 
-        if (c.m_drum.index() == 48 || c.m_drum.index() == 49
-            || less(c.get_storage(m_address), c.m_distributor))
+        // Can't look up in the last two words of a band.
+        if (band_size - c.m_drum.index() <= 2 || less(c.m_drum.read(m_band), c.m_distributor))
         {
-            ++m_address;
             ++c.m_address_register;
             return false;
         }
@@ -488,8 +497,7 @@ public:
     }
 
 private:
-    Address m_address;
-    int m_offset;
+    int m_band;
 };
 
 OPERATION_STEP(Address_to_Program_Register,
@@ -592,7 +600,7 @@ Op_Sequence operation_steps(Computer& computer, Operation op)
     default:
     {
         // Check for branch on 8 in distributor position.
-        int pos = static_cast<int>(op)
+        std::size_t pos = static_cast<int>(op)
             - static_cast<int>(Operation::branch_on_8_in_distributor_position_10);
         assert(0 <= pos && pos < word_size);
         return {};
@@ -607,8 +615,8 @@ Computer::Computer()
       m_power_on(false),
       m_dc_on(false),
       m_programmed_mode(Programmed_Mode::stop),
-      m_cycle_mode(Half_Cycle_Mode::run), //!TODO make persistent
       m_control_mode(Control_Mode::run), //!TODO make persistent
+      m_cycle_mode(Half_Cycle_Mode::run), //!TODO make persistent
       m_display_mode(Display_Mode::distributor),
       m_overflow_mode(Overflow_Mode::stop),
       m_error_mode(Error_Mode::stop),
@@ -641,7 +649,7 @@ void Computer::power_off()
 
 void Computer::dc_on()
 {
-    // DC power can be turned on manually only after it's been turned of automatically and then
+    // DC power can be turned on manually only after it's been turned on automatically and then
     // turned off manually.
     bool can_turn_on = m_power_on && m_elapsed_seconds >= dc_on_delay_seconds;
     // We're either in a state where DC can be turned on, or it's currently off.
@@ -709,16 +717,7 @@ void Computer::set_half_cycle_mode(Half_Cycle_Mode mode)
 
 void Computer::set_control_mode(Control_Mode mode)
 {
-    if (mode == m_control_mode)
-        return;
-
     m_control_mode = mode;
-    if (m_control_mode == Control_Mode::run && m_cycle_mode == Half_Cycle_Mode::half)
-    {
-        m_half_cycle = Half_Cycle::instruction;
-        m_operation_register.clear();
-        m_address_register.clear();
-    }
 }
 
 void Computer::set_display_mode(Display_Mode mode)
@@ -770,9 +769,13 @@ void Computer::program_start()
         switch (m_display_mode)
         {
         case Display_Mode::read_in_storage:
+            while (m_drum.index() != index_of_address(m_address_entry))
+                m_drum.step();
             set_storage(m_address_entry, m_distributor);
             break;
         case Display_Mode::read_out_storage:
+            while (m_drum.index() != index_of_address(m_address_entry))
+                m_drum.step();
             m_distributor = get_storage(m_address_entry);
             break;
         default:
@@ -953,7 +956,9 @@ bool Computer::storage_selection_error() const
     if (m_address_register.is_blank())
         return false;
     auto address = m_address_register.value();
-    return (address > 1999 && (address < storage_entry_address.value() || address > 8003))
+    return (address > 1999
+            && (address < storage_entry_address.value()
+                || address > upper_accumulator_address.value()))
         || m_storage_selection_error;
 }
 
@@ -974,7 +979,7 @@ int Computer::run_time() const
 
 void Computer::set_storage(const Address& address, const Word& word)
 {
-    m_drum.write(address, word);
+    m_drum.write(band_of_address(address), word);
 }
 
 const Word Computer::get_storage(const Address& address) const
@@ -989,7 +994,7 @@ const Word Computer::get_storage(const Address& address) const
         return m_lower_accumulator;
     else if (address == upper_accumulator_address)
         return m_upper_accumulator;
-    return m_drum.read(address);
+    return m_drum.read(band_of_address(address));
 }
 
 // The manual says the upper sign is affected by reset, multiplying and, dividing.  Addition
@@ -1005,8 +1010,7 @@ void Computer::add_to_accumulator(const Word& reg, bool to_upper, TDigit& carry)
     Signed_Register<2*word_size> accum;
     accum.load(m_upper_accumulator, 0, 0);
     accum.load(m_lower_accumulator, 0, word_size);
-    Signed_Register<2*word_size> rhs;
-    rhs.fill(0, '+');
+    Signed_Register<2*word_size> rhs(0, '+');
     rhs.load(reg, 0, word_size);
     accum = add(accum, shift(rhs, to_upper ? word_size : 0), carry);
     // Copy the upper and lower parts of the sums to the registers, preserving the upper sign.
@@ -1052,11 +1056,6 @@ void Computer::set_program_register(const Word& reg)
     m_address_register.load(reg, 2, 0);
 }
 
-void Computer::set_drum(const Address& address, const Word& word)
-{
-    m_drum.write(address, word);
-}
-
 void Computer::set_error()
 {
     m_overflow = true;
@@ -1065,37 +1064,32 @@ void Computer::set_error()
     m_error_sense = true;
 }
 
+void Computer::set_drum(const Address& address, const Word& word)
+{
+    m_drum.m_storage[band_of_address(address)][index_of_address(address)] = word;
+}
+
 Word Computer::get_drum(const Address& address) const
 {
-    return m_drum.read(address);
+    return m_drum.m_storage[band_of_address(address)][index_of_address(address)];
 }
 #endif // TEST
 
 void Computer::Drum::step()
 {
-    m_index = (m_index + 1) % 50;
+    m_index = (m_index + 1) % band_size;
 }
 
-bool Computer::Drum::is_address(const Address& address) const
+Word Computer::Drum::read(std::size_t band) const
 {
-    return address.value() < m_capacity;
+    assert(band < n_bands);
+    return m_storage[band][m_index];
 }
 
-bool Computer::Drum::is_at_head(const Address& address) const
+void Computer::Drum::write(std::size_t band, const Word& word)
 {
-    return m_index == address.value() % 50;
-}
-
-Word Computer::Drum::read(const Address& address) const
-{
-    assert(address.value() < m_capacity);
-    return m_storage[address.value()];
-}
-
-void Computer::Drum::write(const Address& address, const Word& word)
-{
-    assert(address.value() < m_capacity);
-    m_storage[address.value()] = word;
+    assert(band < n_bands);
+    m_storage[band][m_index] = word;
 }
 
 std::size_t Computer::Drum::index() const

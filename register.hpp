@@ -24,7 +24,8 @@ namespace IBM650
 
     /// The type for the numeric value of a register.  Must be large enough to avoid overflow
     /// in all cases of interest.
-    using TValue = int;
+    //! make value() free in computer.cpp.  Make digits() protected? friend<<
+    using TValue = std::size_t;
 
     template <std::size_t N> class Register
     {
@@ -175,14 +176,14 @@ namespace IBM650
     template <std::size_t N>
     TDigit& Register<N>::operator[](std::size_t n)
     {
-        assert(0 < n <= N);
+        assert(0 <= n && n < N);
         return m_digits[N-n-1];
     }
 
     template <std::size_t N>
     const TDigit& Register<N>::operator[](std::size_t n) const
     {
-        assert(0 < n <= N);
+        assert(0 <= n && n < N);
         return m_digits[N-n-1];
     }
 
@@ -212,6 +213,7 @@ namespace IBM650
         Signed_Register(const std::array<TDigit, N+1>& digits);
         /// Make a register from the digits of an unsigned register and the passed-in sign.
         Signed_Register(const Register<N>& reg, TDigit sign);
+        Signed_Register(TDigit fill_digit, TDigit sign);
 
         /// Set the digits to the passed-in integer.  Set the sign to the passed-in sign.
         void fill(TDigit digit, TDigit sign);
@@ -241,6 +243,12 @@ namespace IBM650
     }
 
     template <std::size_t N>
+    Signed_Register<N>::Signed_Register(TDigit fill_digit, TDigit sign)
+    {
+        fill(fill_digit, sign);
+    }
+
+    template <std::size_t N>
     void Signed_Register<N>::fill(TDigit digit, TDigit sign)
     {
         Register<N+1>::fill(digit);
@@ -266,7 +274,7 @@ namespace IBM650
     template <std::size_t N>
     const TDigit& Signed_Register<N>::operator[](std::size_t n) const
     {
-        assert(0 <= n <= N);
+        assert(0 <= n && n <= N);
         return Register<N+1>::digits()[N-n];
     }
 
@@ -351,7 +359,6 @@ namespace IBM650
     template <std::size_t N>
     bool less(const Signed_Register<N>& lhs, const Signed_Register<N>& rhs)
     {
-        bool is_less = true;
         auto itl = lhs.digits().begin() + 1;
         auto itr = rhs.digits().begin() + 1;
         for ( ; itl != lhs.digits().end() && itr != rhs.digits().end(); ++itl, ++itr)
@@ -371,6 +378,7 @@ namespace std
             auto d = IBM650::dec(reg.digits()[i]);
             os << static_cast<char>(d < IBM650::base ? d + '0' : d);
         }
+        return os;
     }
 }
 
