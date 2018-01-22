@@ -1,0 +1,61 @@
+* 1: Run in
+  Prepare to start a program that needs input from cards.
+
+  Before the program is run, cards are loaded into the read hopper.  The "read start"
+  button is pressed.  The input unit pulls in 3 cards from the hopper.  The 8 words
+  from the 1st card are read into the read buffer on the computer's drum.
+
+  read start <-
+  card       -> read buffer
+
+* 2: Read instruction
+  Run a program that needs input from cards.
+
+  After 1, the program is started.  When a read instruction is encountered, the read
+  buffer is transferred to the drum.  The computer signals the input unit to
+  advance.  A card is pulled into the reader.  The cards in the reader advance one
+  station.  The 1st card is ejected into the stacker.  When the cards begin to move,
+  the program continues.  The 8 words from the 2nd card are read into read buffer.
+
+  advance <-
+          -> continue
+  card    -> read buffer
+
+* 3: Empty read hopper
+  Run a program that consumes all the cards.
+
+  After 2, the read hopper is empty.  The 3rd to last card's words are in the read
+  buffer.  3 cards are in the unit; the rest are in the stacker.  The advance signal
+  is ignored.  The cards do not move; the program does not continue.
+
+  advance <-
+
+* 4: Reload
+  Add more cards and continue running the program after the read hopper is emptied.
+
+  After 3, more cards are loaded into the read hopper.  The "read start" button is
+  pressed.  The cards advance and the reader signals for the program to continues.
+  The 8 words from the card that enters the last station are read into the read
+  buffer.
+
+          -> continue
+  card    -> read buffer
+
+* 5: End
+  No more cards are needed.  Finish processing the 3 cards in the reader.
+
+  After 3, the "end of file" button is pressed.  The cards advance and the reader
+  signals for the program to continue.  Cards are at stations 2 and 3.  The 8 words
+  from the card at station 3 are read into the read buffer.  The next 2 read
+  instructions proceed like case 2; advance is honored even though the hopper is
+  empty.  When all cards are in the stacker, advance is ignored.  The read buffer
+  contains the words from the last card.
+
+* 6: Run out
+  Move the cards in the reader to the stacker without processing.
+
+  After 3, "read start" is pressed.  The cards advance but the continue signal is not
+  given.  The read buffer is updated, but to no effect since the program remains
+  paused waiting for the continue signal.  Two more presses empties the reader.  The
+  read buffer holds the word from the last card, but the program remains paused.
+

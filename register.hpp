@@ -366,6 +366,10 @@ namespace IBM650
                 return *itl < *itr;
         return false;
     }
+
+    constexpr std::size_t word_size = 10;
+    using UWord = Register<word_size>;
+    using Word = Signed_Register<word_size>;
 }
 
 namespace std

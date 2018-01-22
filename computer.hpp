@@ -11,9 +11,6 @@ namespace IBM650
     using TTime = int;
 
     using Address = Register<4>;
-    constexpr std::size_t word_size = 10;
-    using UWord = Register<word_size>;
-    using Word = Signed_Register<word_size>;
     /// The number of words in a band on the drum.
     constexpr std::size_t band_size = 50;
     /// The number of bands on the drum.  Each band holds band_size words.
