@@ -55,7 +55,7 @@ Card buffer_to_card(const Buffer& buffer)
 
 void advance(Card_Deck& hopper, Card_Ptr_Deck& fed, Card_Deck& stacker)
 {
-    // Feed a card from the stack into the reader.
+    // Feed a card from the stack into the device.
     fed.push_back(hopper.empty() ? nullptr : std::make_shared<Card>(hopper.front()));
 
     // If a card was pushed past the last station, move it to the stack.
@@ -125,9 +125,18 @@ void Input_Output_Unit::read_start()
 
 void Input_Output_Unit::punch_start()
 {
-    for (std::size_t i = 0; i < punch_feed_size; ++i)
+    if (m_punch_hopper_deck.empty())
+    {
+        advance(m_punch_hopper_deck, m_fed_punch_cards, m_punch_stacker_deck);
+        return;
+    }
+
+    while (!m_fed_punch_cards.front() && !m_punch_hopper_deck.empty())
         advance(m_punch_hopper_deck, m_fed_punch_cards, m_punch_stacker_deck);
     m_punch_running = !m_punch_hopper_deck.empty();
+    if (auto client = m_sink_client.lock())
+        if (m_punch_running)
+            client->resume_sink_client();
 }
 
 void Input_Output_Unit::read_stop()
@@ -209,8 +218,16 @@ void Input_Output_Unit::connect_sink_client(std::weak_ptr<Sink_Client> client)
 
 void Input_Output_Unit::advance_sink()
 {
+    if (!m_punch_running)
+        return;
+
     *m_fed_punch_cards.front() = buffer_to_card(m_sink_buffer);
+    m_sink_buffer.clear();
     advance(m_punch_hopper_deck, m_fed_punch_cards, m_punch_stacker_deck);
+    m_punch_running = !m_punch_hopper_deck.empty();
+    if (auto client = m_sink_client.lock())
+        if (m_punch_running)
+            client->resume_sink_client();
 }
 
 Buffer& Input_Output_Unit::get_sink()

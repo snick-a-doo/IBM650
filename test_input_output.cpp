@@ -231,7 +231,7 @@ struct Mock_Source_Client : Source_Client
         {
             buffer.clear();
             Buffer& source_buffer = src->get_source();
-            for ( ; !source_buffer.empty(); source_buffer.pop_front())
+            for (; !source_buffer.empty(); source_buffer.pop_front())
                 buffer.push_back(source_buffer.front());
         }
     }
@@ -406,7 +406,7 @@ struct Mock_Sink_Client : Sink_Client
         {
             // Transfer to buffer -- no op
             // Write buffer
-            for ( ; !buffer.empty(); buffer.pop_front())
+            for (; !buffer.empty(); buffer.pop_front())
                 snk->get_sink().push_back(buffer.front());
             running = false;
             snk->advance_sink();
@@ -464,6 +464,27 @@ BOOST_AUTO_TEST_CASE(punch_run_in)
     BOOST_CHECK(!f.unit->is_punch_idle());
     BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 2);
     BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 0);
+    f.unit->punch_start();
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 2);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(punch_run_out)
+{
+    Card_Punch_Fixture f;
+    BOOST_CHECK(f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 4);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 0);
+    f.unit->punch_start();
+    BOOST_CHECK(!f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 2);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 0);
+    f.unit->load_punch_hopper(Card_Deck());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 0);
+    f.unit->punch_start();
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 1);
+    f.unit->punch_start();
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 2);
 }
 
 BOOST_AUTO_TEST_CASE(punch_instruction)
@@ -474,7 +495,29 @@ BOOST_AUTO_TEST_CASE(punch_instruction)
     BOOST_CHECK(!f.unit->is_punch_idle());
     BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 1);
     BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 1);
-    BOOST_CHECK(f.unit->punch_stacker_deck().front() == card1);
+    BOOST_CHECK(f.unit->punch_stacker_deck().back() == card1);
+}
+
+BOOST_AUTO_TEST_CASE(reload_punch_hopper)
+{
+    Card_Punch_Fixture f;
+    f.unit->punch_start();
+    f.client->write(card_to_buffer(card1));
+    f.client->write(card_to_buffer(card2));
+    f.client->write(card_to_buffer(card3));
+    BOOST_CHECK(!f.client->running);
+    BOOST_CHECK(f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 0);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 2);
+    BOOST_CHECK(f.unit->punch_stacker_deck().back() == card2);
+
+    f.unit->load_punch_hopper(Card_Deck(2));
+    f.unit->punch_start();
+    BOOST_CHECK(f.client->running);
+    BOOST_CHECK(!f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 1);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 3);
+    BOOST_CHECK(f.unit->punch_stacker_deck().back() == card3);
 }
 
 }
