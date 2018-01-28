@@ -6,33 +6,89 @@
 using namespace IBM533;
 using namespace IBM650;
 
-Word card_word(const Card& card, std::size_t n)
+using Card_Ptr_Deck = std::deque<std::shared_ptr<Card>>;
+
+const std::size_t read_feed_size = 3;
+const std::size_t punch_feed_size = 2;
+
+Buffer IBM533::card_to_buffer(const Card& card)
 {
-    auto decimal = [](int hex) {
-        int dec = 0;
-        for (; dec < 10 && (hex & 1) == 0; ++dec, hex = hex >> 1)
+    auto digit = [](std::size_t n) {
+        TDigit i;
+        for (i = 0; !(n & 1) && i < 10; ++i, n = n >> 1)
             ;
-        assert(dec < 10);
-        return dec;
+        return i;
     };
-    auto sign = [](int hex) { return hex & 0x400 ? '-' : '+'; };
 
-    using namespace IBM650;
-    auto card_it1 = card.begin() + n*word_size;
-    auto card_it2 = card_it1 + word_size;
+    Buffer buffer(buffer_size);
+    for (std::size_t i = 0; i < card.size()/word_size; ++i)
+    {
+        std::array<TDigit, word_size+1> digits;
+        std::size_t n = i*word_size;
+        for (std::size_t j = 0; j < word_size; ++j, ++n)
+            digits[j] = digit(card[n]);
+        digits[word_size] = (card[n-1] & 0x400) ? '-' : '+';
+        buffer[i] = Word(digits);
+    }
+    buffer[8] = zero;
+    buffer[9] = zero;
+    return buffer;
+}
 
-    std::array<TDigit, word_size+1> digits;
-    std::transform(card_it1, card_it2, digits.begin(), decimal);
-    digits[word_size] = sign(*(card_it2 - 1));
-    return Word(digits);
+/// @Return a card punched with the first 8 words of the buffer.
+Card buffer_to_card(const Buffer& buffer)
+{
+    Card card;
+    for (std::size_t i = 0; i < card.size()/word_size; ++i)
+    {
+        assert(i < buffer.size());
+        std::size_t n = i*word_size;
+        for (std::size_t j = 0; j < word_size; ++j, ++n)
+        {
+            assert(n < card_columns);
+            card[n] = 1 << dec(buffer[i].digits()[j]);
+        }
+        card[n - 1] |= 1 << (buffer[i].sign() == '+' ? 11 : 10);
+    }
+    return card;
+}
+
+void advance(Card_Deck& hopper, Card_Ptr_Deck& fed, Card_Deck& stacker)
+{
+    // Feed a card from the stack into the reader.
+    fed.push_back(hopper.empty() ? nullptr : std::make_shared<Card>(hopper.front()));
+
+    // If a card was pushed past the last station, move it to the stack.
+    if (fed.front())
+        stacker.push_back(*(fed.front()));
+    fed.pop_front();
+
+    // Remove the card from the hopper.
+    if (!hopper.empty())
+        hopper.pop_front();
 }
 
 Input_Output_Unit::Input_Output_Unit()
-    : m_pending_advance(false),
-      m_end_of_file(false)
 {
-    while (m_fed_cards.size() < 3)
-        m_fed_cards.push_back(nullptr);
+    while (m_fed_read_cards.size() < read_feed_size)
+        m_fed_read_cards.push_back(nullptr);
+    while (m_fed_punch_cards.size() < punch_feed_size)
+        m_fed_punch_cards.push_back(nullptr);
+}
+
+bool Input_Output_Unit::is_read_idle() const
+{
+    return !m_read_running || m_read_hopper_deck.empty();
+}
+
+bool Input_Output_Unit::is_punch_idle() const
+{
+    return !m_punch_running;
+}
+
+bool Input_Output_Unit::is_end_of_file() const
+{
+    return m_end_of_file;
 }
 
 void Input_Output_Unit::load_read_hopper(const Card_Deck& deck)
@@ -40,28 +96,54 @@ void Input_Output_Unit::load_read_hopper(const Card_Deck& deck)
     m_read_hopper_deck = deck;
 }
 
+void Input_Output_Unit::load_punch_hopper(const Card_Deck& deck)
+{
+    m_punch_hopper_deck = deck;
+}
+
 void Input_Output_Unit::read_start()
 {
+    m_read_running = true;
+
     std::size_t n_cards = m_pending_advance ? 1
         : !m_read_hopper_deck.empty()
-        && std::all_of(m_fed_cards.begin(), m_fed_cards.end(), [](auto p) { return p; }) ? 0
+        && std::all_of(m_fed_read_cards.begin(), m_fed_read_cards.end(),
+                       [](auto p) { return p; })
+        ? 0
         : std::min(std::max(m_read_hopper_deck.size(), static_cast<std::size_t>(1)),
-                   static_cast<std::size_t>(3));
+                   static_cast<std::size_t>(read_feed_size));
 
     // Run in 0 to 3 cards.
     for (std::size_t i = 0; i < n_cards; ++i)
-        advance_cards();
+        advance_read_cards();
 
-    assert(m_fed_cards.size() == 3);
+    assert(m_fed_read_cards.size() == read_feed_size);
 
     if (auto client = m_source_client.lock())
-        client->resume();
+        client->resume_source_client();
+}
+
+void Input_Output_Unit::punch_start()
+{
+    for (std::size_t i = 0; i < punch_feed_size; ++i)
+        advance(m_punch_hopper_deck, m_fed_punch_cards, m_punch_stacker_deck);
+    m_punch_running = !m_punch_hopper_deck.empty();
+}
+
+void Input_Output_Unit::read_stop()
+{
+    m_read_running = false;
+}
+
+void Input_Output_Unit::punch_stop()
+{
+    m_read_running = false;
 }
 
 void Input_Output_Unit::end_of_file()
 {
     m_end_of_file = true;
-    advance();
+    advance_source();
 }
 
 const Card_Deck& Input_Output_Unit::read_hopper_deck() const
@@ -89,49 +171,49 @@ void Input_Output_Unit::connect_source_client(std::weak_ptr<Source_Client> clien
     m_source_client = client;
 }
 
-void Input_Output_Unit::advance_cards()
+void Input_Output_Unit::advance_read_cards()
 {
-    // Feed a card from the stack into the reader.
-    m_fed_cards.push_back(m_read_hopper_deck.empty()
-                          ? nullptr : std::make_shared<Card>(m_read_hopper_deck.front()));
-        
-    // If a card was pushed past the 3rd station, move it to the stack.
-    if (m_fed_cards.front())
-        m_read_stacker_deck.push_back(*(m_fed_cards.front()));
-    m_fed_cards.pop_front();
+    advance(m_read_hopper_deck, m_fed_read_cards, m_read_stacker_deck);
         
     // If a card was pushed into the 3rd station, read it into the buffer.
-    if (m_fed_cards.front())
-    {
-        m_source_buffer.clear();
-        for (std::size_t i = 0; i < 8; ++i)
-            m_source_buffer.push_back(card_word(*m_fed_cards.front(), i));
-        assert(m_source_buffer.size() == 8);
-    }
-
-    // Remove the card from the hopper.
-    if (!m_read_hopper_deck.empty())
-        m_read_hopper_deck.pop_front();
+    if (m_fed_read_cards.front())
+        m_source_buffer = card_to_buffer(*m_fed_read_cards.front());
 
     m_pending_advance = false;
 }
 
-void Input_Output_Unit::advance()
+void Input_Output_Unit::advance_source()
 {
     // No more cards inside.
-    if (std::all_of(m_fed_cards.begin(), m_fed_cards.end(), [](auto p) { return !p; }))
+    if (std::all_of(m_fed_read_cards.begin(), m_fed_read_cards.end(), [](auto p) { return !p; }))
         m_end_of_file = false;
     
     m_pending_advance = true;
-    if (m_read_hopper_deck.empty() && !m_end_of_file)
+    if (!m_read_running || (m_read_hopper_deck.empty() && !m_end_of_file))
         return;
 
-    advance_cards();
+    advance_read_cards();
     if (auto client = m_source_client.lock())
-        client->resume();
+        client->resume_source_client();
 }
 
 Buffer& Input_Output_Unit::get_source()
 {
     return m_source_buffer;
+}
+
+void Input_Output_Unit::connect_sink_client(std::weak_ptr<Sink_Client> client)
+{
+    m_sink_client = client;
+}
+
+void Input_Output_Unit::advance_sink()
+{
+    *m_fed_punch_cards.front() = buffer_to_card(m_sink_buffer);
+    advance(m_punch_hopper_deck, m_fed_punch_cards, m_punch_stacker_deck);
+}
+
+Buffer& Input_Output_Unit::get_sink()
+{
+    return m_sink_buffer;
 }

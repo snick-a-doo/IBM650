@@ -2,8 +2,11 @@
 
 #include "buffer.hpp"
 #include "input_output_unit.hpp"
+#include "register.hpp"
+
 #include <iostream>
 using namespace IBM533;
+using namespace IBM650;
 
 namespace test_input_output
 {
@@ -48,47 +51,17 @@ const Card card4{0x010, 0x001, 0x010, 0x001, 0x010, 0x001, 0x010, 0x001, 0x010, 
         0x010, 0x001, 0x010, 0x001, 0x010, 0x001, 0x010, 0x001, 0x010, 0x401,
         0x010, 0x001, 0x010, 0x001, 0x010, 0x001, 0x010, 0x001, 0x010, 0x401};
 
-bool check_buffer(Buffer& buffer, const Card& card)
-{
-    if (buffer.size() != 8)
-        return false;
-
-    auto decimal = [](int hex) {
-        int dec = 0;
-        for (; dec < 10 && (hex & 1) == 0; ++dec, hex = hex >> 1)
-            ;
-         assert(dec < 10);
-        return dec;
-    };
-    auto sign = [](int hex) { return hex & 0x400 ? '-' : '+'; };
-
-    using namespace IBM650;
-    auto card_it1 = card.begin();
-    auto card_it2 = card.begin() + word_size;
-    std::array<TDigit, word_size+1> digits;
-    for (std::size_t i = 0; i < 8; ++i, buffer.pop_front())
-    {
-        std::transform(card_it1, card_it2, digits.begin(), decimal);
-        digits[word_size] = sign(*(card_it2 - 1));
-        if (Word(digits) != buffer.front())
-        {
-            buffer.clear();
-            return false;
-        }
-        card_it1 = card_it2;
-        card_it2 += word_size;
-    }
-    return true;
-}
+const std::array<Card, 4> test_cards {card1, card2, card3, card4};
 
 BOOST_AUTO_TEST_CASE(initial_state)
 {
     Input_Output_Unit unit;
     BOOST_CHECK(unit.is_on());
-    BOOST_CHECK(unit.read_is_idle());
-    BOOST_CHECK(unit.punch_is_idle());
-    BOOST_CHECK(!unit.double_punch_and_blank());
-    BOOST_CHECK(!unit.double_punch_and_blank());
+    BOOST_CHECK(unit.is_read_idle());
+    BOOST_CHECK(unit.is_punch_idle());
+    BOOST_CHECK(!unit.is_read_feed_stopped());
+    BOOST_CHECK(!unit.is_end_of_file());
+    BOOST_CHECK(!unit.is_double_punch_or_blank());
 
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK(unit.read_stacker_deck().empty());
@@ -103,6 +76,7 @@ BOOST_AUTO_TEST_CASE(read_start_0_cards)
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK(unit.read_stacker_deck().empty());
     BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
+    BOOST_CHECK(unit.is_read_idle());
 }
 
 BOOST_AUTO_TEST_CASE(read_start_1_card)
@@ -120,6 +94,7 @@ BOOST_AUTO_TEST_CASE(read_start_1_card)
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK(unit.read_stacker_deck().empty());
     BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
+    BOOST_CHECK(unit.is_read_idle());
 
     unit.read_start();
     // Card passes 1st read brushes.
@@ -131,15 +106,13 @@ BOOST_AUTO_TEST_CASE(read_start_1_card)
     // Card passes 2nd read brushes.
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK(unit.read_stacker_deck().empty());
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 8);
-    BOOST_CHECK(check_buffer(unit.get_source(), card1));
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
+    BOOST_CHECK_EQUAL(unit.get_source().size(), buffer_size);
+    BOOST_CHECK(card_to_buffer(card1) == unit.get_source());
 
     unit.read_start();
     // Card is stacked.
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK_EQUAL(unit.read_stacker_deck().size(), 1);
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
 
     BOOST_CHECK(unit.read_stacker_deck() == deck);
 }
@@ -163,22 +136,19 @@ BOOST_AUTO_TEST_CASE(read_start_2_cards)
     unit.read_start();
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK(unit.read_stacker_deck().empty());
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 8);
-    BOOST_CHECK(check_buffer(unit.get_source(), card1));
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
+    BOOST_CHECK_EQUAL(unit.get_source().size(), buffer_size);
+    BOOST_CHECK(card_to_buffer(card1) == unit.get_source());
 
     // Card at 3
     unit.read_start();
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK_EQUAL(unit.read_stacker_deck().size(), 1);
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 8);
-    BOOST_CHECK(check_buffer(unit.get_source(), card2));
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
+    BOOST_CHECK_EQUAL(unit.get_source().size(), buffer_size);
+    BOOST_CHECK(card_to_buffer(card2) == unit.get_source());
 
     unit.read_start();
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK_EQUAL(unit.read_stacker_deck().size(), 2);
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
 
     BOOST_CHECK(unit.read_stacker_deck() == deck);
 }
@@ -196,29 +166,26 @@ BOOST_AUTO_TEST_CASE(read_start_3_cards)
     unit.read_start();
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK(unit.read_stacker_deck().empty());
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 8);
+    BOOST_CHECK_EQUAL(unit.get_source().size(), buffer_size);
     // Don't empty the buffer this time.
 
     // Cards at 2 and 3
     unit.read_start();
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK_EQUAL(unit.read_stacker_deck().size(), 1);
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 8);
-    BOOST_CHECK(check_buffer(unit.get_source(), card2));
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
+    BOOST_CHECK_EQUAL(unit.get_source().size(), buffer_size);
+    BOOST_CHECK(card_to_buffer(card2) == unit.get_source());
 
     // Card at 3
     unit.read_start();
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK_EQUAL(unit.read_stacker_deck().size(), 2);
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 8);
-    BOOST_CHECK(check_buffer(unit.get_source(), card3));
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
+    BOOST_CHECK_EQUAL(unit.get_source().size(), buffer_size);
+    BOOST_CHECK(card_to_buffer(card3) == unit.get_source());
 
     unit.read_start();
     BOOST_CHECK(unit.read_hopper_deck().empty());
     BOOST_CHECK_EQUAL(unit.read_stacker_deck().size(), 3);
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
 
     BOOST_CHECK(unit.read_stacker_deck() == deck);
 }
@@ -236,22 +203,20 @@ BOOST_AUTO_TEST_CASE(read_start_200_cards)
     unit.read_start();
     BOOST_CHECK_EQUAL(unit.read_hopper_deck().size(), 197);
     BOOST_CHECK(unit.read_stacker_deck().empty());
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 8);
-    BOOST_CHECK(check_buffer(unit.get_source(), card1));
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
+    BOOST_CHECK_EQUAL(unit.get_source().size(), buffer_size);
+    BOOST_CHECK(card_to_buffer(card1) == unit.get_source());
 
     // Start does nothing with cards in the hopper.
     unit.read_start();
     BOOST_CHECK_EQUAL(unit.read_hopper_deck().size(), 197);
     BOOST_CHECK(unit.read_stacker_deck().empty());
-    BOOST_CHECK_EQUAL(unit.get_source().size(), 0);
 }
 
 struct Mock_Source_Client : Source_Client
 {
     // Source_Client interface
     virtual void connect_source(std::weak_ptr<Source> src) override { source = src; }
-    virtual void resume() override { running = true; }
+    virtual void resume_source_client() override { running = true; }
 
     // Test methods
     void read() {
@@ -259,13 +224,15 @@ struct Mock_Source_Client : Source_Client
         // Transfer buffer -- no op
         running = false;
         if (auto src = source.lock())
-            src->advance();
+            src->advance_source();
     }
-    void fill_buffer(Buffer& source_buffer) {
-        buffer.clear();
-        while (!source_buffer.empty()) {
-            buffer.push_back(source_buffer.front());
-            source_buffer.pop_front();
+    void fill_buffer() {
+        if (auto src = source.lock())
+        {
+            buffer.clear();
+            Buffer& source_buffer = src->get_source();
+            for ( ; !source_buffer.empty(); source_buffer.pop_front())
+                buffer.push_back(source_buffer.front());
         }
     }
     std::weak_ptr<Source> source;
@@ -275,17 +242,19 @@ struct Mock_Source_Client : Source_Client
 
 struct Card_Read_Fixture
 {
-    Card_Read_Fixture()
+    Card_Read_Fixture(std::size_t cards = 4)
         : unit(std::make_shared<Input_Output_Unit>()),
           client(std::make_shared<Mock_Source_Client>())
         {
+            for (std::size_t i = 0; i < cards; ++i)
+                deck.push_back(test_cards[i % test_cards.size()]);
             unit->connect_source_client(client);
             client->connect_source(unit);
             unit->load_read_hopper(deck);
         }
     std::shared_ptr<Input_Output_Unit> unit;
     std::shared_ptr<Mock_Source_Client> client;
-    Card_Deck deck {card1, card2, card3, card4};
+    Card_Deck deck;
 };
 
 BOOST_AUTO_TEST_CASE(run_in)
@@ -300,16 +269,17 @@ BOOST_AUTO_TEST_CASE(run_in)
     BOOST_CHECK_EQUAL(f.unit->read_hopper_deck().size(), 1);
     BOOST_CHECK(f.unit->read_stacker_deck().empty());
     // 1st card read into buffer
-    f.client->fill_buffer(f.unit->get_source());
-    BOOST_CHECK(check_buffer(f.client->buffer, card1));
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card1) == f.client->buffer);
+    BOOST_CHECK(!f.unit->is_read_idle());
 }
 
 BOOST_AUTO_TEST_CASE(read_instruction)
 {
     Card_Read_Fixture f;
     f.unit->read_start();
-    f.client->fill_buffer(f.unit->get_source());
-    
+    f.client->fill_buffer();
+
     // Computer executes a read instruction, transfers the buffer, signals advance.
     f.client->read();
     // Cards advance.
@@ -318,8 +288,10 @@ BOOST_AUTO_TEST_CASE(read_instruction)
     // Client gets resume signal.
     BOOST_CHECK(f.client->running);
     // 2nd card read into buffer
-    f.client->fill_buffer(f.unit->get_source());
-    BOOST_CHECK(check_buffer(f.client->buffer, card2));
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card2) == f.client->buffer);
+    // Stacker deck is empty.
+    BOOST_CHECK(f.unit->is_read_idle());
 }
 
 BOOST_AUTO_TEST_CASE(reload_read_hopper)
@@ -331,19 +303,22 @@ BOOST_AUTO_TEST_CASE(reload_read_hopper)
     BOOST_CHECK_EQUAL(f.unit->read_stacker_deck().size(), 1);
     f.client->read();
     // Hopper empty, cards don't advance, resume signal not given.
-    f.client->fill_buffer(f.unit->get_source());
-    BOOST_CHECK(check_buffer(f.client->buffer, card2));
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card2) == f.client->buffer);
     BOOST_CHECK(!f.client->running);
+    BOOST_CHECK(f.unit->is_read_idle());
+    BOOST_CHECK(!f.unit->is_end_of_file());
 
     f.unit->load_read_hopper(f.deck);
     f.unit->read_start();
+    BOOST_CHECK(!f.unit->is_read_idle());
     // Cards advance.
-    f.client->fill_buffer(f.unit->get_source());
-    BOOST_CHECK(check_buffer(f.client->buffer, card3));
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card3) == f.client->buffer);
     f.client->read();
     BOOST_CHECK(f.client->running);
-    f.client->fill_buffer(f.unit->get_source());
-    BOOST_CHECK(check_buffer(f.client->buffer, card4));
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card4) == f.client->buffer);
 }
 
 BOOST_AUTO_TEST_CASE(end_of_file)
@@ -353,15 +328,153 @@ BOOST_AUTO_TEST_CASE(end_of_file)
     f.client->read();
     f.client->read();
     // Hopper empty, cards don't advance, resume signal not given.
-    f.client->fill_buffer(f.unit->get_source());
-    BOOST_CHECK(check_buffer(f.client->buffer, card2));
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card2) == f.client->buffer);
     BOOST_CHECK(!f.client->running);
+    BOOST_CHECK(f.unit->is_read_idle());
 
     f.unit->end_of_file();
-    f.client->fill_buffer(f.unit->get_source());
-    BOOST_CHECK(check_buffer(f.client->buffer, card3));
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card3) == f.client->buffer);
+    BOOST_CHECK(f.unit->is_end_of_file());
     f.client->read();
-    f.client->fill_buffer(f.unit->get_source());
-    BOOST_CHECK(check_buffer(f.client->buffer, card4));
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card4) == f.client->buffer);
 }
+
+BOOST_AUTO_TEST_CASE(read_stop)
+{
+    Card_Read_Fixture f(8);
+    f.unit->read_start();
+    f.client->read();
+    BOOST_CHECK_EQUAL(f.unit->read_hopper_deck().size(), 4);
+    BOOST_CHECK_EQUAL(f.unit->read_stacker_deck().size(), 1);
+    // Either key stops reading and punching.
+    f.unit->read_stop();
+    BOOST_CHECK(f.unit->is_read_idle());
+    BOOST_CHECK(!f.unit->is_end_of_file());
+    f.client->read();
+    // Stopped, cards don't advance, resume signal not given.
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card2) == f.client->buffer);
+    BOOST_CHECK(!f.client->running);
+
+    f.unit->read_start();
+    BOOST_CHECK(!f.unit->is_read_idle());
+    BOOST_CHECK(!f.unit->is_end_of_file());
+    // Cards advance.
+    BOOST_CHECK(f.client->running);
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card3) == f.client->buffer);
+    f.client->read();
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card4) == f.client->buffer);
+}
+
+BOOST_AUTO_TEST_CASE(punch_stop)
+{
+    Card_Read_Fixture f(8);
+    f.unit->read_start();
+    f.client->read();
+    BOOST_CHECK_EQUAL(f.unit->read_hopper_deck().size(), 4);
+    BOOST_CHECK_EQUAL(f.unit->read_stacker_deck().size(), 1);
+    // Either key stops reading and punching.
+    f.unit->punch_stop();
+    f.client->read();
+    BOOST_CHECK(!f.client->running);
+
+    f.unit->read_start();
+    BOOST_CHECK(!f.unit->is_read_idle());
+    BOOST_CHECK(!f.unit->is_end_of_file());
+    BOOST_CHECK(f.client->running);
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card3) == f.client->buffer);
+    f.client->read();
+    f.client->fill_buffer();
+    BOOST_CHECK(card_to_buffer(card4) == f.client->buffer);
+}
+
+struct Mock_Sink_Client : Sink_Client
+{
+    // Sink_Client interface
+    virtual void connect_sink(std::weak_ptr<Sink> snk) override { sink = snk; }
+    virtual void resume_sink_client() override { running = true; }
+
+    // Test methods
+    void write(Buffer buffer) {
+        if (auto snk = sink.lock())
+        {
+            // Transfer to buffer -- no op
+            // Write buffer
+            for ( ; !buffer.empty(); buffer.pop_front())
+                snk->get_sink().push_back(buffer.front());
+            running = false;
+            snk->advance_sink();
+        }
+    }
+    std::weak_ptr<Sink> sink;
+    bool running = false;
+};
+
+struct Card_Punch_Fixture
+{
+    Card_Punch_Fixture(std::size_t cards = 4)
+        : unit(std::make_shared<Input_Output_Unit>()),
+          client(std::make_shared<Mock_Sink_Client>())
+        {
+            unit->connect_sink_client(client);
+            client->connect_sink(unit);
+            unit->load_punch_hopper(Card_Deck(cards));
+        }
+    std::shared_ptr<Input_Output_Unit> unit;
+    std::shared_ptr<Mock_Sink_Client> client;
+};
+
+BOOST_AUTO_TEST_CASE(punch_run_in_0_cards)
+{
+    Card_Punch_Fixture f(0);
+    BOOST_CHECK(f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 0);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 0);
+    f.unit->punch_start();
+    BOOST_CHECK(f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 0);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(punch_run_in_1_card)
+{
+    Card_Punch_Fixture f(1);
+    BOOST_CHECK(f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 1);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 0);
+    f.unit->punch_start();
+    BOOST_CHECK(f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 0);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(punch_run_in)
+{
+    Card_Punch_Fixture f;
+    BOOST_CHECK(f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 4);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 0);
+    f.unit->punch_start();
+    BOOST_CHECK(!f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 2);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(punch_instruction)
+{
+    Card_Punch_Fixture f;
+    f.unit->punch_start();
+    f.client->write(card_to_buffer(card1));
+    BOOST_CHECK(!f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 1);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 1);
+    BOOST_CHECK(f.unit->punch_stacker_deck().front() == card1);
+}
+
 }

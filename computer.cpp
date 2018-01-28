@@ -17,7 +17,6 @@ const Address distributor_address({8,0,0,1});
 const Address lower_accumulator_address({8,0,0,2});
 const Address upper_accumulator_address({8,0,0,3});
 
-const Word zero({0,0, 0,0,0,0, 0,0,0,0, '+'});
 const Word five({0,0, 0,0,0,0, 0,0,0,5, '+'});
 const Word negative_five({0,0, 0,0,0,0, 0,0,0,5, '-'});
 
