@@ -342,7 +342,7 @@ BOOST_AUTO_TEST_CASE(end_of_file)
     BOOST_CHECK(card_to_buffer(card4) == f.client->buffer);
 }
 
-BOOST_AUTO_TEST_CASE(read_stop)
+BOOST_AUTO_TEST_CASE(read_read_stop)
 {
     Card_Read_Fixture f(8);
     f.unit->read_start();
@@ -371,7 +371,7 @@ BOOST_AUTO_TEST_CASE(read_stop)
     BOOST_CHECK(card_to_buffer(card4) == f.client->buffer);
 }
 
-BOOST_AUTO_TEST_CASE(punch_stop)
+BOOST_AUTO_TEST_CASE(read_punch_stop)
 {
     Card_Read_Fixture f(8);
     f.unit->read_start();
@@ -518,6 +518,46 @@ BOOST_AUTO_TEST_CASE(reload_punch_hopper)
     BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 1);
     BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 3);
     BOOST_CHECK(f.unit->punch_stacker_deck().back() == card3);
+}
+
+BOOST_AUTO_TEST_CASE(punch_punch_stop)
+{
+    Card_Punch_Fixture f(8);
+    f.unit->punch_start();
+    f.client->write(card_to_buffer(card1));
+    f.unit->punch_stop();
+    BOOST_CHECK(f.unit->is_punch_idle());
+    f.client->write(card_to_buffer(card2));
+    BOOST_CHECK(f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 5);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 1);
+    BOOST_CHECK(f.unit->punch_stacker_deck().back() == card1);
+
+    f.unit->punch_start();
+    BOOST_CHECK(!f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 4);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 2);
+    BOOST_CHECK(f.unit->punch_stacker_deck().back() == card2);
+}
+
+BOOST_AUTO_TEST_CASE(punch_read_stop)
+{
+    Card_Punch_Fixture f(8);
+    f.unit->punch_start();
+    f.client->write(card_to_buffer(card1));
+    f.unit->read_stop();
+    BOOST_CHECK(f.unit->is_punch_idle());
+    f.client->write(card_to_buffer(card2));
+    BOOST_CHECK(f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 5);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 1);
+    BOOST_CHECK(f.unit->punch_stacker_deck().back() == card1);
+
+    f.unit->punch_start();
+    BOOST_CHECK(!f.unit->is_punch_idle());
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 4);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 2);
+    BOOST_CHECK(f.unit->punch_stacker_deck().back() == card2);
 }
 
 }
