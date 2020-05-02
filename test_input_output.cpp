@@ -500,7 +500,7 @@ BOOST_AUTO_TEST_CASE(punch_instruction)
 
 BOOST_AUTO_TEST_CASE(reload_punch_hopper)
 {
-    Card_Punch_Fixture f;
+    Card_Punch_Fixture f(4);
     f.unit->punch_start();
     f.client->write(card_to_buffer(card1));
     f.client->write(card_to_buffer(card2));
@@ -510,14 +510,14 @@ BOOST_AUTO_TEST_CASE(reload_punch_hopper)
     BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 0);
     BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 2);
     BOOST_CHECK(f.unit->punch_stacker_deck().back() == card2);
-
     f.unit->load_punch_hopper(Card_Deck(2));
     f.unit->punch_start();
+    // Does nothing with 2 cards in the unit and any in the hopper.
     BOOST_CHECK(f.client->running);
     BOOST_CHECK(!f.unit->is_punch_idle());
-    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 1);
-    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 3);
-    BOOST_CHECK(f.unit->punch_stacker_deck().back() == card3);
+    BOOST_CHECK_EQUAL(f.unit->punch_hopper_deck().size(), 2);
+    BOOST_CHECK_EQUAL(f.unit->punch_stacker_deck().size(), 2);
+    BOOST_CHECK(f.unit->punch_stacker_deck().back() == card2);
 }
 
 }

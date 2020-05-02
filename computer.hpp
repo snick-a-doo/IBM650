@@ -8,15 +8,16 @@
 
 namespace IBM650
 {
-    using TTime = int;
+using TTime = int;
 
-    using Address = Register<4>;
-    /// The number of words in a band on the drum.
-    constexpr std::size_t band_size = 50;
-    /// The number of bands on the drum.  Each band holds band_size words.
-    constexpr static size_t n_bands = 40;
+constexpr std::size_t address_size = 4;
+using Address = Register<address_size>;
+/// The number of words in a band on the drum.
+constexpr std::size_t band_size = 50;
+/// The number of bands on the drum.  Each band holds band_size words.
+constexpr static size_t n_bands = 40;
 
-    class Operation_Step;
+class Operation_Step;
 
 class Computer
 {
@@ -87,8 +88,8 @@ public:
         upper_accumulator,
         distributor,
         program_register,
-        read_in_storage,
         read_out_storage,
+        read_in_storage,
     };
     enum class Overflow_Mode
     {
@@ -131,7 +132,6 @@ public:
     /// @Return the state of the display switch.
     Display_Mode get_display_mode() const;
 
-#ifdef TEST
     // Direct access to the machine's state for unit tests.
     void set_distributor(const Word& reg);
     void set_upper(const Word& reg);
@@ -139,9 +139,7 @@ public:
     void set_program_register(const Word& reg);
     void set_drum(const Address& addr, const Word& data);
     void set_error();
-
     Word get_drum(const Address& addr) const;
-#endif
 
     // Console Keys
 
@@ -254,9 +252,6 @@ private:
 
     class Drum
     {
-#ifdef TEST
-        friend class Computer;
-#endif
     public:
         /// Rotate the drum by one word.
         void step();
@@ -266,6 +261,11 @@ private:
         void write(std::size_t band, const Word& word);
         /// @Return the drum index.  Used to see if an address is at the read head.
         std::size_t index() const;
+
+        // Direct access to the drum's state for unit tests.
+        void set_storage(std::size_t band, std::size_t index, const Word& word);
+        Word get_storage(std::size_t band, std::size_t index) const;
+
     private:
         /// The words stored on the drum.
         std::array<std::array<Word, band_size>, n_bands> m_storage;

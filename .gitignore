@@ -1,5 +1,9 @@
 *.o
+*.a
 *.deps/
 *.gdb_history
 test
-
+*~
+GPATH
+GRTAGS
+GTAGS

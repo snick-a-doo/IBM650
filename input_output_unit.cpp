@@ -183,7 +183,7 @@ void Input_Output_Unit::connect_source_client(std::weak_ptr<Source_Client> clien
 void Input_Output_Unit::advance_read_cards()
 {
     advance(m_read_hopper_deck, m_fed_read_cards, m_read_stacker_deck);
-        
+
     // If a card was pushed into the 3rd station, read it into the buffer.
     if (m_fed_read_cards.front())
         m_source_buffer = card_to_buffer(*m_fed_read_cards.front());
@@ -196,7 +196,7 @@ void Input_Output_Unit::advance_source()
     // No more cards inside.
     if (std::all_of(m_fed_read_cards.begin(), m_fed_read_cards.end(), [](auto p) { return !p; }))
         m_end_of_file = false;
-    
+
     m_pending_advance = true;
     if (!m_read_running || (m_read_hopper_deck.empty() && !m_end_of_file))
         return;

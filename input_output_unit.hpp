@@ -12,9 +12,7 @@ constexpr std::size_t card_columns = IBM650::word_size*card_words;
 using Card = std::array<int, card_columns>;
 using Card_Deck = std::deque<Card>;
 
-#ifdef TEST
 Buffer card_to_buffer(const Card& card);
-#endif
 
 class Input_Output_Unit : public Source, public Sink
 {

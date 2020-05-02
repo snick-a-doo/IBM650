@@ -8,6 +8,8 @@
   read start <-
   card       -> read buffer
 
+  Cards: N>2, 0, 0 => N-3, 3, 0
+
 * 2: Read instruction
   Run a program that needs input from cards.
 
@@ -21,6 +23,8 @@
           -> continue
   card    -> read buffer
 
+  Cards: N>0, 3, M => N-1, 3, M+1
+
 * 3: Empty read hopper
   Run a program that consumes all the cards.
 
@@ -29,6 +33,8 @@
   is ignored.  The cards do not move; the program does not continue.
 
   advance <-
+
+  Cards: 1, 3, M => 0, 3, M+1
 
 * 4: Reload
   Add more cards and continue running the program after the read hopper is emptied.

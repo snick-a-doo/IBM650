@@ -97,7 +97,8 @@ protected:
 
 OPERATION_STEP(Instruction_to_Program_Register,
 {
-    std::cerr << "I to P addr:=" << c.m_address_register << std::endl;
+    std::cerr << "I to P: addr=" << c.m_address_register
+              << " Drum: " << c.m_drum.index() << std::endl;
     if (c.m_address_register.value() >= 8000
         || index_of_address(c.m_address_register) == c.m_drum.index())
     {
@@ -141,7 +142,7 @@ OPERATION_STEP(Instruction_Address_to_Address_Register,
         // Positions are counted from least significant to most significant.  The opcode for
         // position 10 is 90; the others are 90 + position.
         std::size_t pos = static_cast<int>(op)
-            - static_cast<int>(Operation::branch_on_8_in_distributor_position_10);        
+            - static_cast<int>(Operation::branch_on_8_in_distributor_position_10);
         pos = pos == 0 ? word_size : pos;
         if (0 < pos && pos <= word_size)
         {
@@ -669,7 +670,7 @@ void Computer::master_power_off()
     m_can_turn_on = false;
 }
 
-void Computer::step(int seconds)
+void Computer::step(TTime seconds)
 {
     // Turn DC on if power has been on long enough.
     if (m_power_on
@@ -919,12 +920,12 @@ const Address& Computer::address_register() const
 {
     return m_address_register;
 }
- 
+
 bool Computer::data_address() const
 {
     return m_half_cycle == Half_Cycle::data;
 }
- 
+
 bool Computer::instruction_address() const
 {
     return m_half_cycle == Half_Cycle::instruction;
@@ -937,17 +938,17 @@ bool Computer::overflow() const
 
 bool Computer::distributor_validity_error() const
 {
-    return !m_distributor.is_valid();
+    return !m_distributor.is_number();
 }
 
 bool Computer::accumulator_validity_error() const
 {
-    return !m_upper_accumulator.is_valid() || !m_lower_accumulator.is_valid();
+    return !m_upper_accumulator.is_number() || !m_lower_accumulator.is_number();
 }
 
 bool Computer::program_register_validity_error() const
 {
-    return !m_program_register.is_valid();
+    return !m_program_register.is_number();
 }
 
 bool Computer::storage_selection_error() const
@@ -983,7 +984,6 @@ void Computer::set_storage(const Address& address, const Word& word)
 
 const Word Computer::get_storage(const Address& address) const
 {
-    std::cerr << "get_storage " << address.value() << std::endl;
     assert(!address.is_blank());
     if (address == storage_entry_address)
         return m_storage_entry;
@@ -1031,7 +1031,6 @@ void Computer::shift_accumulator(int n_places_left)
     m_lower_accumulator.load(accum, word_size, 0);
 }
 
-#ifdef TEST
 void Computer::set_distributor(const Word& reg)
 {
     m_distributor = reg;
@@ -1065,14 +1064,13 @@ void Computer::set_error()
 
 void Computer::set_drum(const Address& address, const Word& word)
 {
-    m_drum.m_storage[band_of_address(address)][index_of_address(address)] = word;
+    m_drum.set_storage(band_of_address(address), index_of_address(address), word);
 }
 
 Word Computer::get_drum(const Address& address) const
 {
-    return m_drum.m_storage[band_of_address(address)][index_of_address(address)];
+    return m_drum.get_storage(band_of_address(address), index_of_address(address));
 }
-#endif // TEST
 
 void Computer::Drum::step()
 {
@@ -1094,4 +1092,14 @@ void Computer::Drum::write(std::size_t band, const Word& word)
 std::size_t Computer::Drum::index() const
 {
     return m_index;
+}
+
+void Computer::Drum::set_storage(std::size_t band, std::size_t index, const Word& word)
+{
+    m_storage[band][index] = word;
+}
+
+Word Computer::Drum::get_storage(std::size_t band, std::size_t index) const
+{
+    return m_storage[band][index];
 }
