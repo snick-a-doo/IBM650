@@ -1,113 +1,110 @@
-#include <boost/test/unit_test.hpp>
-
 #include "computer.hpp"
 #include "test_fixture.hpp"
+#include "doctest.h"
 
 using namespace IBM650;
 
-BOOST_AUTO_TEST_CASE(off)
+TEST_CASE("turn comptuter on")
 {
     Computer computer;
-    BOOST_CHECK(!computer.is_on());
-    BOOST_CHECK(!computer.is_blower_on());
-    BOOST_CHECK(!computer.is_ready());
-}
+    CHECK(!computer.is_on());
+    CHECK(!computer.is_blower_on());
+    CHECK(!computer.is_ready());
 
-BOOST_AUTO_TEST_CASE(turn_on)
-{
-    Computer computer;
     computer.power_on();
-    BOOST_CHECK(computer.is_on());
-    BOOST_CHECK(computer.is_blower_on());
-    BOOST_CHECK(!computer.is_ready());
+    CHECK(computer.is_on());
+    CHECK(computer.is_blower_on());
+    CHECK(!computer.is_ready());
+
+    // Computer is ready after 3 minutes.
     computer.step(179);
-    BOOST_CHECK(!computer.is_ready());
+    CHECK(!computer.is_ready());
     computer.step(1);
-    BOOST_CHECK(computer.is_ready());
+    CHECK(computer.is_ready());
 }
 
-BOOST_AUTO_TEST_CASE(turn_off)
+TEST_CASE("turn computer off")
 {
     Computer_Ready_Fixture f;
-    BOOST_CHECK(f.computer.is_on());
-    BOOST_CHECK(f.computer.is_blower_on());
-    BOOST_CHECK(f.computer.is_ready());
+    CHECK(f.computer.is_on());
+    CHECK(f.computer.is_blower_on());
+    CHECK(f.computer.is_ready());
     f.computer.power_off();
-    BOOST_CHECK(!f.computer.is_on());
-    BOOST_CHECK(f.computer.is_blower_on());
-    BOOST_CHECK(!f.computer.is_ready());
+    CHECK(!f.computer.is_on());
+    CHECK(f.computer.is_blower_on());
+    CHECK(!f.computer.is_ready());
     f.computer.step(299);
-    BOOST_CHECK(f.computer.is_blower_on());
+    CHECK(f.computer.is_blower_on());
     f.computer.step(1);
-    BOOST_CHECK(!f.computer.is_blower_on());
+    CHECK(!f.computer.is_blower_on());
 }
 
-BOOST_AUTO_TEST_CASE(dc_on_off)
+TEST_CASE("turn dc on and off")
 {
     Computer computer;
     computer.power_on();
-    BOOST_CHECK(computer.is_on());
+    CHECK(computer.is_on());
     computer.step(10);
     computer.dc_on(); // Too early; no effect.
-    BOOST_CHECK(!computer.is_ready());
+    CHECK(!computer.is_ready());
     computer.step(10);
     computer.dc_off(); // Doesn't prevent automatic DC turn-on.
     computer.step(180);
-    BOOST_CHECK(computer.is_on());
-    BOOST_CHECK(computer.is_blower_on());
-    BOOST_CHECK(computer.is_ready());
+    CHECK(computer.is_on());
+    CHECK(computer.is_blower_on());
+    CHECK(computer.is_ready());
     computer.dc_off();
-    BOOST_CHECK(computer.is_on());
-    BOOST_CHECK(computer.is_blower_on());
-    BOOST_CHECK(!computer.is_ready());
+    CHECK(computer.is_on());
+    CHECK(computer.is_blower_on());
+    CHECK(!computer.is_ready());
     computer.step(10);
-    BOOST_CHECK(!computer.is_ready());
+    CHECK(!computer.is_ready());
     computer.step(1800);
     computer.dc_on();
-    BOOST_CHECK(computer.is_on());
-    BOOST_CHECK(computer.is_blower_on());
-    BOOST_CHECK(computer.is_ready());
+    CHECK(computer.is_on());
+    CHECK(computer.is_blower_on());
+    CHECK(computer.is_ready());
     computer.power_off();
     computer.step(500);
-    BOOST_CHECK(!computer.is_ready());
+    CHECK(!computer.is_ready());
     computer.dc_on();
-    BOOST_CHECK(!computer.is_ready());
+    CHECK(!computer.is_ready());
 }
 
-BOOST_AUTO_TEST_CASE(master_power)
+TEST_CASE("turn master power off")
 {
     Computer_Ready_Fixture f;
     f.computer.master_power_off();
-    BOOST_CHECK(!f.computer.is_on());
-    BOOST_CHECK(!f.computer.is_blower_on());
-    BOOST_CHECK(!f.computer.is_ready());
+    CHECK(!f.computer.is_on());
+    CHECK(!f.computer.is_blower_on());
+    CHECK(!f.computer.is_ready());
     f.computer.power_on();
     // Can't be turned back on.
-    BOOST_CHECK(!f.computer.is_on());
-    BOOST_CHECK(!f.computer.is_blower_on());
-    BOOST_CHECK(!f.computer.is_ready());
+    CHECK(!f.computer.is_on());
+    CHECK(!f.computer.is_blower_on());
+    CHECK(!f.computer.is_ready());
     f.computer.dc_on();
-    BOOST_CHECK(!f.computer.is_on());
-    BOOST_CHECK(!f.computer.is_blower_on());
-    BOOST_CHECK(!f.computer.is_ready());
+    CHECK(!f.computer.is_on());
+    CHECK(!f.computer.is_blower_on());
+    CHECK(!f.computer.is_ready());
 }
 
-BOOST_AUTO_TEST_CASE(transfer)
+TEST_CASE("transfer button")
 {
     Computer_Ready_Fixture f;
     f.computer.set_control_mode(Computer::Control_Mode::manual);
     f.computer.set_address(Address({1,2,3,4}));
-    BOOST_CHECK(f.computer.address_register() != Address({1,2,3,4}));
+    CHECK(f.computer.address_register() != Address({1,2,3,4}));
     f.computer.transfer();
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({1,2,3,4}));
+    CHECK(f.computer.address_register() == Address({1,2,3,4}));
     f.computer.set_control_mode(Computer::Control_Mode::address_stop);
     f.computer.set_address(Address({0,0,9,9}));
     f.computer.transfer();
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({1,2,3,4}));
+    CHECK(f.computer.address_register() == Address({1,2,3,4}));
     f.computer.set_control_mode(Computer::Control_Mode::run);
     f.computer.set_address(Address({0,0,9,9}));
     f.computer.transfer();
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({1,2,3,4}));
+    CHECK(f.computer.address_register() == Address({1,2,3,4}));
 }
 
 struct Reset_Fixture : public Computer_Ready_Fixture
@@ -122,160 +119,166 @@ struct Reset_Fixture : public Computer_Ready_Fixture
     }
 };
 
-BOOST_AUTO_TEST_CASE(program_reset_manual)
+TEST_CASE("reset state")
 {
     Reset_Fixture f;
-    BOOST_CHECK(f.computer.program_register_validity_error());
-    BOOST_CHECK(f.computer.storage_selection_error());
-    BOOST_CHECK(f.computer.clocking_error());
-    f.computer.set_display_mode(Computer::Display_Mode::program_register);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({1,2, 3,4,5,6, 7,8,9,10, '_'}));
-    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>({1,2}));
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({3,4,5,6}));
-
-    f.computer.set_control_mode(Computer::Control_Mode::manual);
-    f.computer.program_reset();
-    BOOST_CHECK(!f.computer.program_register_validity_error());
-    BOOST_CHECK(!f.computer.storage_selection_error());
-    BOOST_CHECK(!f.computer.clocking_error());
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
-    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address());
+    CHECK(f.computer.distributor_validity_error());
+    CHECK(f.computer.accumulator_validity_error());
+    CHECK(f.computer.program_register_validity_error());
+    CHECK(f.computer.storage_selection_error());
+    CHECK(f.computer.clocking_error());
 }
 
-BOOST_AUTO_TEST_CASE(program_reset_run)
+TEST_CASE("program reset")
 {
     Reset_Fixture f;
-    f.computer.set_control_mode(Computer::Control_Mode::run);
-    f.computer.program_reset();
-    BOOST_CHECK(!f.computer.program_register_validity_error());
-    BOOST_CHECK(!f.computer.storage_selection_error());
-    BOOST_CHECK(!f.computer.clocking_error());
     f.computer.set_display_mode(Computer::Display_Mode::program_register);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
-    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({8,0,0,0}));
+    SUBCASE("initial register states")
+    {
+        CHECK(f.computer.display() == Word({1,2, 3,4,5,6, 7,8,9,10, '_'}));
+        CHECK(f.computer.operation_register() == Register<2>({1,2}));
+        CHECK(f.computer.address_register() == Address({3,4,5,6}));
+    }
+    SUBCASE("manual mode")
+    {
+        f.computer.set_control_mode(Computer::Control_Mode::manual);
+        f.computer.program_reset();
+        CHECK(!f.computer.program_register_validity_error());
+        CHECK(!f.computer.storage_selection_error());
+        CHECK(!f.computer.clocking_error());
+        CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+        CHECK(f.computer.operation_register() == Register<2>());
+        CHECK(f.computer.address_register().is_blank()); // cleared in manual mode
+    }
+    SUBCASE("run mode")
+    {
+        f.computer.set_control_mode(Computer::Control_Mode::run);
+        f.computer.program_reset();
+        CHECK(!f.computer.program_register_validity_error());
+        CHECK(!f.computer.storage_selection_error());
+        CHECK(!f.computer.clocking_error());
+        f.computer.set_display_mode(Computer::Display_Mode::program_register);
+        CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+        CHECK(f.computer.operation_register() == Register<2>());
+        CHECK(f.computer.address_register() == Address({8,0,0,0})); // zeroed
+    }
+    SUBCASE("address stop mode")
+    {
+        f.computer.set_control_mode(Computer::Control_Mode::address_stop);
+        f.computer.program_reset();
+        CHECK(!f.computer.program_register_validity_error());
+        CHECK(!f.computer.storage_selection_error());
+        CHECK(!f.computer.clocking_error());
+        f.computer.set_display_mode(Computer::Display_Mode::program_register);
+        CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+        CHECK(f.computer.operation_register() == Register<2>());
+        CHECK(f.computer.address_register() == Address({8,0,0,0})); // zeroed
+    }
 }
 
-BOOST_AUTO_TEST_CASE(program_reset_address_stop)
+TEST_CASE("accumulator reset")
 {
     Reset_Fixture f;
-    f.computer.set_control_mode(Computer::Control_Mode::address_stop);
-    f.computer.program_reset();
-    BOOST_CHECK(!f.computer.program_register_validity_error());
-    BOOST_CHECK(!f.computer.storage_selection_error());
-    BOOST_CHECK(!f.computer.clocking_error());
-    f.computer.set_display_mode(Computer::Display_Mode::program_register);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
-    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({8,0,0,0}));
-}
 
-BOOST_AUTO_TEST_CASE(accumulator_reset_manual)
-{
-    Reset_Fixture f;
-    BOOST_CHECK(f.computer.distributor_validity_error());
-    BOOST_CHECK(f.computer.accumulator_validity_error());
-    BOOST_CHECK(f.computer.storage_selection_error());
-    BOOST_CHECK(f.computer.clocking_error());
     f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({2,1, 2,2,2,3, 2,4,2,5, '+'}));
+    CHECK(f.computer.display() == Word({2,1, 2,2,2,3, 2,4,2,5, '+'}));
     f.computer.set_display_mode(Computer::Display_Mode::upper_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({10,1, 1,2,1,3, 1,4,1,5, '+'}));
+    CHECK(f.computer.display() == Word({10,1, 1,2,1,3, 1,4,1,5, '+'}));
     f.computer.set_display_mode(Computer::Display_Mode::distributor);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({3,10, 3,2,3,3, 3,4,3,5, '-'}));
+    CHECK(f.computer.display() == Word({3,10, 3,2,3,3, 3,4,3,5, '-'}));
     f.computer.set_display_mode(Computer::Display_Mode::program_register);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({1,2, 3,4,5,6, 7,8,9,10, '_'}));
-    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>({1,2}));
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({3,4,5,6}));
+    CHECK(f.computer.display() == Word({1,2, 3,4,5,6, 7,8,9,10, '_'}));
+    CHECK(f.computer.operation_register() == Register<2>({1,2}));
+    CHECK(f.computer.address_register() == Address({3,4,5,6}));
 
     f.computer.set_control_mode(Computer::Control_Mode::manual);
     f.computer.accumulator_reset();
-    BOOST_CHECK(!f.computer.overflow());
-    BOOST_CHECK(!f.computer.distributor_validity_error());
-    BOOST_CHECK(!f.computer.accumulator_validity_error());
-    // Program register still has a bad digit.
-    BOOST_CHECK(f.computer.program_register_validity_error());
-    // Address register is still out of range: 3456.
-    BOOST_CHECK(f.computer.storage_selection_error());
-    BOOST_CHECK(!f.computer.clocking_error());
-    f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
-    f.computer.set_display_mode(Computer::Display_Mode::upper_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
-    f.computer.set_display_mode(Computer::Display_Mode::distributor);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
 
+    CHECK(!f.computer.overflow());
+    CHECK(!f.computer.distributor_validity_error());
+    CHECK(!f.computer.accumulator_validity_error());
+    // Program register still has a bad digit.
+    CHECK(f.computer.program_register_validity_error());
+    // Address register is still out of range: 3456.
+    CHECK(f.computer.storage_selection_error());
+    CHECK(!f.computer.clocking_error());
+    f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
+    CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+    f.computer.set_display_mode(Computer::Display_Mode::upper_accumulator);
+    CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+    f.computer.set_display_mode(Computer::Display_Mode::distributor);
+    CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
     // Unchanged.
     f.computer.set_display_mode(Computer::Display_Mode::program_register);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({1,2, 3,4,5,6, 7,8,9,10, '_'}));
-    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>({1,2}));
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({3,4,5,6}));
+    CHECK(f.computer.display() == Word({1,2, 3,4,5,6, 7,8,9,10, '_'}));
+    CHECK(f.computer.operation_register() == Register<2>({1,2}));
+    CHECK(f.computer.address_register() == Address({3,4,5,6}));
 }
 
-BOOST_AUTO_TEST_CASE(error_reset)
+TEST_CASE("error reset")
 {
     Reset_Fixture f;
     f.computer.error_reset();
-    BOOST_CHECK(f.computer.overflow());
-    BOOST_CHECK(f.computer.distributor_validity_error());
-    BOOST_CHECK(f.computer.accumulator_validity_error());
-    BOOST_CHECK(f.computer.program_register_validity_error());
-    BOOST_CHECK(f.computer.error_sense());
+    CHECK(f.computer.overflow());
+    CHECK(f.computer.distributor_validity_error());
+    CHECK(f.computer.accumulator_validity_error());
+    CHECK(f.computer.program_register_validity_error());
+    CHECK(f.computer.error_sense());
     // Still has bad address.
-    BOOST_CHECK(f.computer.storage_selection_error());
+    CHECK(f.computer.storage_selection_error());
     f.computer.set_program_register(Word({1,2, 1,2,3,4, 2,4,6,8, '-'}));
-    BOOST_CHECK(!f.computer.storage_selection_error());
-    BOOST_CHECK(!f.computer.clocking_error());
+    CHECK(!f.computer.storage_selection_error());
+    CHECK(!f.computer.clocking_error());
 }
 
-BOOST_AUTO_TEST_CASE(error_sense_reset)
+TEST_CASE("error sense reset")
 {
     Reset_Fixture f;
-    BOOST_CHECK(f.computer.error_sense());
+    CHECK(f.computer.error_sense());
     f.computer.error_sense_reset();
-    BOOST_CHECK(!f.computer.error_sense());
+    CHECK(!f.computer.error_sense());
 }
 
-BOOST_AUTO_TEST_CASE(computer_reset_manual)
+TEST_CASE("computer reset")
 {
     Reset_Fixture f;
-    f.computer.set_control_mode(Computer::Control_Mode::manual);
-    f.computer.computer_reset();
-    BOOST_CHECK(!f.computer.program_register_validity_error());
-    BOOST_CHECK(!f.computer.storage_selection_error());
-    BOOST_CHECK(!f.computer.clocking_error());
-    BOOST_CHECK(!f.computer.error_sense());
-    f.computer.set_display_mode(Computer::Display_Mode::program_register);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
-    f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
-    f.computer.set_display_mode(Computer::Display_Mode::upper_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
-    f.computer.set_display_mode(Computer::Display_Mode::distributor);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
-    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address());
+    SUBCASE("manual mode")
+    {
+        f.computer.set_control_mode(Computer::Control_Mode::manual);
+        f.computer.computer_reset();
+        CHECK(!f.computer.program_register_validity_error());
+        CHECK(!f.computer.storage_selection_error());
+        CHECK(!f.computer.clocking_error());
+        CHECK(!f.computer.error_sense());
+        f.computer.set_display_mode(Computer::Display_Mode::program_register);
+        CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+        f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
+        CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+        f.computer.set_display_mode(Computer::Display_Mode::upper_accumulator);
+        CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+        f.computer.set_display_mode(Computer::Display_Mode::distributor);
+        CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+        CHECK(f.computer.operation_register() == Register<2>());
+        CHECK(f.computer.address_register() == Address());
+    }
+    SUBCASE("run mode")
+    {
+        f.computer.set_control_mode(Computer::Control_Mode::run);
+        f.computer.computer_reset();
+        f.computer.set_display_mode(Computer::Display_Mode::program_register);
+        CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
+        f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
+        CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+        f.computer.set_display_mode(Computer::Display_Mode::upper_accumulator);
+        CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+        f.computer.set_display_mode(Computer::Display_Mode::distributor);
+        CHECK(f.computer.display() == Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+        CHECK(f.computer.operation_register() == Register<2>());
+        CHECK(f.computer.address_register() == Address({8,0,0,0}));
+    }
 }
 
-BOOST_AUTO_TEST_CASE(computer_reset_run)
-{
-    Reset_Fixture f;
-    f.computer.set_control_mode(Computer::Control_Mode::run);
-    f.computer.computer_reset();
-    f.computer.set_display_mode(Computer::Display_Mode::program_register);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '_'}));
-    f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
-    f.computer.set_display_mode(Computer::Display_Mode::upper_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
-    f.computer.set_display_mode(Computer::Display_Mode::distributor);
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
-    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({8,0,0,0}));
-}
-
-BOOST_AUTO_TEST_CASE(storage_entry)
+TEST_CASE("storage entry")
 {
     Word word({1,2, 1,2,3,4, 2,4,6,8, '-'});
     Address word_addr({0,5,1,2});
@@ -283,7 +286,9 @@ BOOST_AUTO_TEST_CASE(storage_entry)
     Address zero_addr({0,5,1,3});
 
     Computer_Ready_Fixture f;
-    // See operator's manual p.55 "Examples of Use of the Control Console"
+    // See operator's manual p.55 "Examples of Use of the Control Console/Enter
+    // Information"
+    // 1. Write word to word_addr.
     f.computer.set_storage_entry(word);
     f.computer.set_address(word_addr);
     f.computer.set_control_mode(IBM650::Computer::Control_Mode::manual);
@@ -292,8 +297,8 @@ BOOST_AUTO_TEST_CASE(storage_entry)
     f.computer.transfer();
     f.computer.program_start();
     f.computer.set_display_mode(Computer::Display_Mode::distributor);
-    BOOST_CHECK_EQUAL(f.computer.display(), word);
-
+    CHECK(f.computer.display() == word);
+    // 2. Write zero to zero_addr.
     f.computer.set_storage_entry(zero);
     f.computer.set_address(zero_addr);
     f.computer.set_display_mode(IBM650::Computer::Display_Mode::read_in_storage);
@@ -301,29 +306,30 @@ BOOST_AUTO_TEST_CASE(storage_entry)
     f.computer.transfer();
     f.computer.program_start();
     f.computer.set_display_mode(Computer::Display_Mode::distributor);
-    BOOST_CHECK_EQUAL(f.computer.display(), zero);
-
+    CHECK(f.computer.display() == zero);
+    // 3. Read word from word_addr.
     f.computer.set_address(word_addr);
     f.computer.set_display_mode(Computer::Display_Mode::read_out_storage);
     f.computer.program_reset();
     f.computer.transfer();
     f.computer.program_start();
-    BOOST_CHECK_EQUAL(f.computer.display(), word);
-
+    CHECK(f.computer.display() == word);
+    // 4. Read zero from zero_addr.
     f.computer.set_address(zero_addr);
     f.computer.set_display_mode(Computer::Display_Mode::read_out_storage);
     f.computer.program_reset();
     f.computer.transfer();
     f.computer.program_start();
-    BOOST_CHECK_EQUAL(f.computer.display(), zero);
+    CHECK(f.computer.display() == zero);
 }
 
-BOOST_AUTO_TEST_CASE(accumulator_entry)
+TEST_CASE("accumulator entry")
 {
     Word word({1,2, 1,2,3,4, 2,4,6,8, '-'});
     Address word_addr({0,5,1,2});
 
     Computer_Ready_Fixture f;
+    // Write word to the drum at word_addr.
     f.computer.set_storage_entry(word);
     f.computer.set_address(word_addr);
     f.computer.set_control_mode(IBM650::Computer::Control_Mode::manual);
@@ -332,56 +338,55 @@ BOOST_AUTO_TEST_CASE(accumulator_entry)
     f.computer.transfer();
     f.computer.program_start();
 
-    // f.computer.set_display_mode(Computer::Display_Mode::distributor);
-    // BOOST_CHECK_EQUAL(f.computer.display(), word);
-
-    // op 65 is "reset add lower".
-    f.computer.set_storage_entry(Word({6,5, 0,5,1,2, 0,0,0,0, '+'}));
-    f.computer.set_half_cycle_mode(Computer::Half_Cycle_Mode::half);
-    f.computer.set_control_mode(Computer::Control_Mode::run);
-    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
-    BOOST_CHECK_EQUAL(f.computer.address_register(), word_addr);
-    // The I-half-cycle is ready to be executed.
-    f.computer.program_reset();
-    BOOST_CHECK(!f.computer.data_address());
-    BOOST_CHECK(f.computer.instruction_address());
-    f.computer.program_start();
-
-    // The 1st half-cycle loads the program register from the storage-entry switches.
-    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>({6,5}));
-    BOOST_CHECK_EQUAL(f.computer.address_register(), word_addr);
-    // The D-half-cycle is ready to be executed.
-    BOOST_CHECK(f.computer.data_address());
-    BOOST_CHECK(!f.computer.instruction_address());
-    f.computer.program_start();
-    BOOST_CHECK_EQUAL(f.computer.operation_register(), Register<2>());
-    BOOST_CHECK_EQUAL(f.computer.address_register(), Address({0,0,0,0}));
-    f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), word);
-}
-
-BOOST_AUTO_TEST_CASE(accumulator_entry_2)
-{
-    Word word({1,2, 2,4,6,8, 1,2,3,4, '-'});
-
-    Computer_Ready_Fixture f;
     f.computer.set_display_mode(Computer::Display_Mode::distributor);
+    CHECK(f.computer.display() == word);
 
-    // "Reset add lower" from storage entry switches.
-    f.computer.set_storage_entry(Word({6,5, 8,0,0,0, 0,0,0,0, '+'}));
-    f.computer.set_half_cycle_mode(Computer::Half_Cycle_Mode::half);
-    f.computer.set_control_mode(Computer::Control_Mode::run);
-    f.computer.program_reset();
-    f.computer.program_start();
+    SUBCASE("copy word from word_addr to the lower accumulator")
+    {
+        // op 65 is "reset add lower".
+        f.computer.set_storage_entry(Word({6,5, 0,5,1,2, 0,0,0,0, '+'}));
+        f.computer.set_half_cycle_mode(Computer::Half_Cycle_Mode::half);
+        f.computer.set_control_mode(Computer::Control_Mode::run);
+        CHECK(f.computer.operation_register() == Register<2>());
+        CHECK(f.computer.address_register() == word_addr);
+        // The I-half-cycle is ready to be executed.
+        f.computer.program_reset();
+        CHECK(!f.computer.data_address());
+        CHECK(f.computer.instruction_address());
+        f.computer.program_start();
 
-    f.computer.set_storage_entry(word);
-    f.computer.program_start();
+        // The 1st half-cycle loads the program register from the storage-entry switches.
+        CHECK(f.computer.operation_register() == Register<2>({6,5}));
+        CHECK(f.computer.address_register() == word_addr);
+        // The D-half-cycle is ready to be executed.
+        CHECK(f.computer.data_address());
+        CHECK(!f.computer.instruction_address());
+        f.computer.program_start();
+        CHECK(f.computer.operation_register() == Register<2>());
+        CHECK(f.computer.address_register() == Address({0,0,0,0}));
+        f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
+        CHECK(f.computer.display() == word);
+    }
+    SUBCASE("copy from storage entry to the lower accumulator")
+    {
+        f.computer.set_display_mode(Computer::Display_Mode::distributor);
 
-    f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
-    BOOST_CHECK_EQUAL(f.computer.display(), word);
+        // "Reset add lower" from address 8000, the storage entry switches.
+        f.computer.set_storage_entry(Word({6,5, 8,0,0,0, 0,0,0,0, '+'}));
+        f.computer.set_half_cycle_mode(Computer::Half_Cycle_Mode::half);
+        f.computer.set_control_mode(Computer::Control_Mode::run);
+        f.computer.program_reset();
+        f.computer.program_start();
+
+        f.computer.set_storage_entry(word);
+        f.computer.program_start();
+
+        f.computer.set_display_mode(Computer::Display_Mode::lower_accumulator);
+        CHECK(f.computer.display() == word);
+    }
 }
 
-BOOST_AUTO_TEST_CASE(start_program)
+TEST_CASE("start program")
 {
     // Add to upper
     Word instr1({1,0, 1,1,0,0, 0,1,0,1, '+'});
@@ -412,7 +417,7 @@ BOOST_AUTO_TEST_CASE(start_program)
 
     f.computer.computer_reset();
     f.computer.program_start();
-    BOOST_CHECK_EQUAL(f.computer.display(), Word({0,0, 0,0,0,3, 4,3,4,2, '+'}));
+    CHECK(f.computer.display() == Word({0,0, 0,0,0,3, 4,3,4,2, '+'}));
 }
 
 struct LD_Fixture : public Run_Fixture
@@ -434,30 +439,28 @@ struct LD_Fixture : public Run_Fixture
     Word data;
 };
 
-BOOST_AUTO_TEST_CASE(run_LD)
+TEST_CASE("run LD")
 {
     LD_Fixture f;
     f.computer.computer_reset();
     f.computer.program_start();
-    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+    CHECK(f.computer.display() == f.data);
 }
 
-BOOST_AUTO_TEST_CASE(run_LD_twice)
+TEST_CASE("run LD twice")
 {
     // Check that the program can be run again after reset.
     LD_Fixture f;
     f.computer.computer_reset();
-    std::cerr << "start 1\n";
     f.computer.program_start();
-    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+    CHECK(f.computer.display() == f.data);
 
     f.computer.computer_reset();
-    std::cerr << "start 2\n";
     f.computer.program_start();
-    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+    CHECK(f.computer.display() == f.data);
 }
 
-BOOST_AUTO_TEST_CASE(LD_timing)
+TEST_CASE("load distributor' timing")
 {
     LD_Fixture f;
     f.computer.computer_reset();
@@ -484,8 +487,8 @@ BOOST_AUTO_TEST_CASE(LD_timing)
     // 2 to fill PR, OP, DA to ADDR
     // 0 for stop
     // 2 to for IA to ADDR, enable PR
-    BOOST_CHECK_EQUAL(f.computer.run_time(), 155);
-    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+    CHECK(f.computer.run_time() == 155);
+    CHECK(f.computer.display() == f.data);
 }
 
 struct Optimum_LD_Fixture : public Run_Fixture
@@ -507,7 +510,7 @@ struct Optimum_LD_Fixture : public Run_Fixture
     Word data;
 };
 
-BOOST_AUTO_TEST_CASE(optimum_LD_timing)
+TEST_CASE("optimum 'load distributor' timing")
 {
     Optimum_LD_Fixture f;
     f.computer.computer_reset();
@@ -534,8 +537,8 @@ BOOST_AUTO_TEST_CASE(optimum_LD_timing)
     // 2 to fill PR, OP, DA to ADDR
     // 0 for stop
     // 2 to for IA to ADDR, enable PR
-    BOOST_CHECK_EQUAL(f.computer.run_time(), 15);
-    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+    CHECK(f.computer.run_time() == 15);
+    CHECK(f.computer.display() == f.data);
 }
 
 struct RAL_Fixture : public Run_Fixture
@@ -557,11 +560,10 @@ struct RAL_Fixture : public Run_Fixture
     Word data;
 };
 
-BOOST_AUTO_TEST_CASE(RAL_timing)
+TEST_CASE("'reset and add lower' timing")
 {
     RAL_Fixture f;
     f.computer.computer_reset();
-    std::cerr << "start\n";
     f.computer.program_start();
     // Drum index = 0
     // 1 to enable PR
@@ -587,8 +589,8 @@ BOOST_AUTO_TEST_CASE(RAL_timing)
     // 2 to fill PR, OP, DA to ADDR
     // 0 for stop
     // 2 to for IA to ADDR, enable PR
-    BOOST_CHECK_EQUAL(f.computer.run_time(), 155);
-    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+    CHECK(f.computer.run_time() == 155);
+    CHECK(f.computer.display() == f.data);
 }
 
 struct Optimum_RAL_Fixture : public Run_Fixture
@@ -610,7 +612,7 @@ struct Optimum_RAL_Fixture : public Run_Fixture
     Word data;
 };
 
-BOOST_AUTO_TEST_CASE(optimum_RAL_timing)
+TEST_CASE("optimum 'reset and add lower' timing")
 {
     Optimum_RAL_Fixture f;
     f.computer.computer_reset();
@@ -640,6 +642,6 @@ BOOST_AUTO_TEST_CASE(optimum_RAL_timing)
     // 2 to fill PR, OP, DA to ADDR
     // 0 for stop
     // 2 to for IA to ADDR, enable PR
-    BOOST_CHECK_EQUAL(f.computer.run_time(), 17);
-    BOOST_CHECK_EQUAL(f.computer.display(), f.data);
+    CHECK(f.computer.run_time() == 17);
+    CHECK(f.computer.display() == f.data);
 }

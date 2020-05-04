@@ -3,6 +3,7 @@
 *.deps/
 *.gdb_history
 test
+builddir
 *~
 GPATH
 GRTAGS
