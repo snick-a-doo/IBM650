@@ -1,4 +1,3 @@
-// g++ app.cpp -o app `pkg-config gtkmm-3.0 --cflags --libs` -L.. -lIBM650
 #include "../computer.hpp"
 #include <gtkmm.h>
 #include <iostream>
@@ -6,11 +5,12 @@
 static constexpr int timestep_ms = 100;
 static constexpr std::size_t bits_per_word = 7;
 
+using TDigit_Display = std::array<Gtk::CheckButton*, bits_per_word>;
+
 class Console : public Gtk::Window
 {
 public:
     Console(Glib::RefPtr<Gtk::Builder> builder);
-    virtual ~Console() = default;
 
 private:
     IBM650::Computer c;
@@ -41,20 +41,29 @@ private:
     void on_accum_reset();
     void on_error_reset();
     void on_error_sense_reset();
+    void on_master_power(bool on);
 
     bool update(int timer);
-    void display(IBM650::Word);
+    void display();
 
     Gtk::ToggleButton* m_power_on_light;
     Gtk::ToggleButton* m_ready_light;
 
-    using TDigit_Display = std::array<Gtk::CheckButton*, bits_per_word>;
-    using TWord_Display = std::array<TDigit_Display, IBM650::word_size>;
-    TWord_Display m_display_light;
-    Gtk::CheckButton* m_display_plus;
-    Gtk::CheckButton* m_display_minus;
+    std::array<TDigit_Display, IBM650::word_size + 1> m_display_lights;
+    std::array<TDigit_Display, 2> m_operation_lights;
+    std::array<TDigit_Display, IBM650::address_size> m_address_lights;
 
     IBM650::Word m_storage = IBM650::zero;
+
+    Gtk::ToggleButton* m_data_adddress_light;
+    Gtk::ToggleButton* m_instruction_adddress_light;
+    Gtk::ToggleButton* m_program_register_error_light;
+    Gtk::ToggleButton* m_storage_selection_error_light;
+    Gtk::ToggleButton* m_overflow_light;
+    Gtk::ToggleButton* m_clocking_error_light;
+    Gtk::ToggleButton* m_accumulator_error_light;
+    Gtk::ToggleButton* m_error_sense_light;
+
     IBM650::Address m_address = IBM650::Address({0,0,0,0});
 
     double m_time_s = 0.0;
@@ -63,43 +72,62 @@ private:
 
 Console::Console(Glib::RefPtr<Gtk::Builder> builder)
 {
-    auto add_button = [builder, this](std::string id, void (Console::*callback)()) {
+    auto add_button = [builder, this](std::string id, void(Console::*callback)()) {
         Gtk::Button* b;
         builder->get_widget(id, b);
         b->signal_clicked().connect(sigc::mem_fun(*this, callback));
     };
     auto add_radio_button = [builder, this](std::string id,
                                             int index,
-                                            void (Console::*callback)(int)) {
+                                            void(Console::*callback)(int)) {
         Gtk::RadioButton* rb;
         builder->get_widget(id, rb);
         rb->signal_clicked().connect(sigc::bind<int>(sigc::mem_fun(*this, callback), index));
     };
     auto add_radio = [add_radio_button](std::string group,
                                         std::vector<std::string> choices,
-                                        void (Console::*callback)(int)) {
+                                        void(Console::*callback)(int)) {
         int index = 0;
         for (const auto& choice : choices)
             add_radio_button(group + ' ' + choice, index++, callback);
     };
     auto add_scale = [builder, this](std::string id,
                                      int digit,
-                                     void (Console::*callback)(int, Gtk::Scale* s)) {
+                                     void(Console::*callback)(int, Gtk::Scale* s)) {
         Gtk::Scale* s;
         builder->get_widget(id + ' ' + std::to_string(digit), s);
         s->set_value(0);
         s->signal_value_changed().connect(
-            sigc::bind<int, Gtk::Scale*>(sigc::mem_fun(*this, callback), digit+1, s));
+            sigc::bind<int, Gtk::Scale*>(sigc::mem_fun(*this, callback), digit, s));
+    };
+    auto add_register = [builder](std::string id, auto& lights) {
+        for (std::size_t digit = 0; digit < lights.size(); ++digit)
+            for (std::size_t bit = 0; bit < lights.front().size(); ++bit)
+            {
+                auto name = id + ' ' + std::to_string(digit) + ' ' + std::to_string(bit);
+                auto& light = lights[digit][bit];
+                builder->get_widget(name, light);
+                light->set_can_focus(false);
+                light->set_sensitive(false);
+            }
     };
     auto add_sign = [builder, this](std::string id,
                                     IBM650::TDigit sign,
-                                    void (Console::*callback)(IBM650::TDigit)) {
+                                    void(Console::*callback)(IBM650::TDigit)) {
         Gtk::RadioButton* rb;
         builder->get_widget(id + ' ' + sign, rb);
         rb->signal_clicked().connect(
             sigc::bind<IBM650::TDigit>(sigc::mem_fun(*this, callback), sign));
     };
+    auto add_light = [builder](std::string id) {
+        Gtk::CheckButton* check;
+        builder->get_widget(id, check);
+        check->set_can_focus(false);
+        check->set_sensitive(false);
+        return check;
+    };
 
+    // Power
     add_button("power on", &Console::on_power_on);
     builder->get_widget("power on light", m_power_on_light);
     builder->get_widget("ready light", m_ready_light);
@@ -107,27 +135,42 @@ Console::Console(Glib::RefPtr<Gtk::Builder> builder)
     add_button("dc off", &Console::on_dc_off);
     add_button("dc on", &Console::on_dc_on);
 
-    for (std::size_t digit = 0; digit < m_display_light.size(); ++digit)
-        for (std::size_t bit = 0; bit < m_display_light.front().size(); ++bit)
-        {
-            std::string id = "display " + std::to_string(digit) + ' ' + std::to_string(bit);
-            builder->get_widget(id, m_display_light[digit][bit]);
-        }
-
-    builder->get_widget("display +", m_display_plus);
-    builder->get_widget("display -", m_display_minus);
-
+    // Storage Selection
+    add_register("display", m_display_lights);
     for (std::size_t i = 0; i < IBM650::word_size; ++i)
         add_scale("storage", i, &Console::on_storage);
     for (auto sign : {'+', '-'})
         add_sign("storage", sign, &Console::on_storage_sign);
 
-    add_radio("programmed", {"stop", "run"}, &Console::on_programmed);
-    add_radio("half cycle", {"half", "run"}, &Console::on_half_cycle);
+    // Operation and Address
+    add_register("operation", m_operation_lights);
+    add_register("address", m_address_lights);
 
+    // Operating Lights
+    m_data_adddress_light = add_light("data address light");
+    m_instruction_adddress_light = add_light("instruction address light");
+    // Not implemented yet.
+    add_light("program light");
+    add_light("accumulator light");
+    add_light("punch light");
+    add_light("read light");
+
+    // Checking Lights
+    m_program_register_error_light = add_light("program register error light");
+    m_storage_selection_error_light = add_light("storage selection error light");
+    m_overflow_light = add_light("overflow light");
+    m_clocking_error_light = add_light("clocking error light");
+    m_accumulator_error_light = add_light("accumulator error light");
+    m_error_sense_light = add_light("error sense light");
+    add_light("blank light");  // For symmetry.  Does nothing.
+
+    // Address Selection
     for (std::size_t i = 0; i < IBM650::address_size; ++i)
         add_scale("address", i, &Console::on_address);
 
+    // Modes
+    add_radio("programmed", {"stop", "run"}, &Console::on_programmed);
+    add_radio("half cycle", {"half", "run"}, &Console::on_half_cycle);
     add_radio("control", {"address stop", "run", "manual operation"}, &Console::on_control);
     add_radio("display", {"lower accum",
                           "upper accum",
@@ -138,6 +181,7 @@ Console::Console(Glib::RefPtr<Gtk::Builder> builder)
     add_radio("overflow", {"stop", "sense"}, &Console::on_overflow);
     add_radio("error", {"stop", "sense"}, &Console::on_error);
 
+    // Actions
     add_button("transfer", &Console::on_transfer);
     add_button("program start", &Console::on_program_start);
     add_button("program stop", &Console::on_program_stop);
@@ -146,6 +190,14 @@ Console::Console(Glib::RefPtr<Gtk::Builder> builder)
     add_button("accum reset", &Console::on_accum_reset);
     add_button("error reset", &Console::on_error_reset);
     add_button("error sense reset", &Console::on_error_sense_reset);
+
+    Gtk::Switch* master_power;
+    builder->get_widget("master power", master_power);
+    master_power->set_active(true);
+    // Doesn't matter here because we can only turn it off, but it would be nice to know
+    // how to pass the switch state.
+    master_power->property_active().signal_changed().connect(
+        sigc::bind<bool>(sigc::mem_fun(*this, &Console::on_master_power), false));
 
     // Set the computer state to match the controls.
     c.set_storage_entry(m_storage);
@@ -181,7 +233,7 @@ void Console::on_dc_on()
 }
 void Console::on_storage(int digit, Gtk::Scale* s)
 {
-    m_storage[digit] = IBM650::bin(s->get_value());
+    m_storage[digit+1] = IBM650::bin(s->get_value());
     c.set_storage_entry(m_storage);
 }
 void Console::on_storage_sign(IBM650::TDigit sign)
@@ -209,7 +261,7 @@ void Console::on_control(int index)
 void Console::on_display(int index)
 {
     c.set_display_mode(IBM650::Computer::Display_Mode(index));
-    display(c.display());
+    display();
 }
 void Console::on_overflow(int index)
 {
@@ -251,17 +303,40 @@ void Console::on_error_sense_reset()
 {
     c.error_sense_reset();
 }
-
-void Console::display(IBM650::Word word)
+void Console::on_master_power(bool on)
 {
-    static const std::size_t places = m_display_light.size();
-    static const std::size_t bits = m_display_light.front().size();
-    // The sign could be any bit pattern, not necessarily + or -.
-    m_display_plus->set_active(word.sign() == '+');
-    m_display_minus->set_active(word.sign() == '-');
-    for (std::size_t place = 0; place < places; ++place)
-        for (std::size_t bit = 0; bit < bits; ++bit)
-            m_display_light[place][bit]->set_active(word[place+1] & (1 << bit));
+    std::cerr << "power " << on << std::endl;
+    // Can't be turned back on.
+    if (!on)
+        c.master_power_off();
+}
+
+template <std::size_t N>
+void display_register(const IBM650::Register<N>& reg,
+                      const std::array<TDigit_Display, N>& lights)
+{
+    for (std::size_t place = 0; place < N; ++place)
+        for (std::size_t bit = 0; bit < bits_per_word; ++bit)
+            lights[place][bit]->set_active(reg[place] & (1 << bit));
+}
+
+void Console::display()
+{
+    m_power_on_light->set_active(c.is_on());
+    m_ready_light->set_active(c.is_ready());
+
+    display_register(c.display(), m_display_lights);
+    display_register(c.operation_register(), m_operation_lights);
+    display_register(c.address_register(), m_address_lights);
+
+    m_data_adddress_light->set_active(c.data_address());
+    m_instruction_adddress_light->set_active(c.instruction_address());
+    m_program_register_error_light->set_active(c.program_register_validity_error());
+    m_storage_selection_error_light->set_active(c.storage_selection_error());
+    m_overflow_light->set_active(c.overflow());
+    m_clocking_error_light->set_active(c.clocking_error());
+    m_accumulator_error_light->set_active(c.accumulator_validity_error());
+    m_error_sense_light->set_active(c.error_sense());
 }
 
 bool Console::update(int timer)
@@ -273,9 +348,7 @@ bool Console::update(int timer)
         c.step(seconds);
         m_last_step_s += seconds;
     }
-    m_power_on_light->set_active(c.is_on());
-    m_ready_light->set_active(c.is_ready());
-    display(c.display());
+    display();
     return true;
 }
 
