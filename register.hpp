@@ -40,6 +40,7 @@ template <std::size_t N> class Register
 public:
     /// Make a register initialized with all bits unset.
     Register();
+    virtual ~Register() = default;
     /// Make a register initialized with the codes for the digits in passed-in integer
     /// array.  The character '_' may be passed to indicate a blank (all bits unset).
     Register(const std::array<TDigit, N>& digits);

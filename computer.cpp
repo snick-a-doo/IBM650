@@ -1,9 +1,12 @@
 #include "computer.hpp"
-
+#include <boost/log/core.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/expressions.hpp>
 #include <cassert>
 
-using namespace IBM650;
+#define LOG BOOST_LOG_TRIVIAL
 
+using namespace IBM650;
 
 namespace IBM650
 {
@@ -82,6 +85,7 @@ public:
         : c(computer),
           op(op)
         {};
+    virtual ~Operation_Step() = default;
     virtual bool execute() { return true; }
 protected:
     Computer& c;
@@ -97,13 +101,14 @@ protected:
 
 OPERATION_STEP(Instruction_to_Program_Register,
 {
-    std::cerr << "I to P: addr=" << c.m_address_register
-              << " Drum: " << c.m_drum.index() << std::endl;
+    LOG(trace) << "I to P: addr=" << c.m_address_register
+               << "  Drum: index=" << c.m_drum.index();
+
     if (c.m_address_register.value() >= 8000
         || index_of_address(c.m_address_register) == c.m_drum.index())
     {
         c.m_program_register.load(c.get_storage(c.m_address_register), 0, 0);
-        std::cerr << "I to PR: PR=" << c.m_program_register << std::endl;
+        LOG(trace) << "I to PR: PR=" << c.m_program_register;
         return true;
     }
     return false;
@@ -113,8 +118,8 @@ OPERATION_STEP(Op_and_Address_to_Registers,
 {
     c.m_operation_register.load(c.m_program_register, 0, 0);
     c.m_address_register.load(c.m_program_register, 2, 0);
-    std::cerr << c.m_run_time << " Op and DA to reg: Op=" << c.m_operation_register
-              << " DA=" << c.m_address_register << std::endl;
+    LOG(trace) << c.m_run_time << " Op and DA to reg: Op=" << c.m_operation_register
+               << " DA=" << c.m_address_register;
 
     c.m_half_cycle = c.Half_Cycle::data;
     return true;
@@ -155,7 +160,7 @@ OPERATION_STEP(Instruction_Address_to_Address_Register,
 
     if (!branch)
         c.m_address_register.load(c.m_program_register, 6, 0);
-    std::cerr << c.m_run_time << " IA to R: IA=" << c.m_address_register << std::endl;
+    LOG(trace) << c.m_run_time << " IA to R: IA=" << c.m_address_register;
 
     c.m_half_cycle = c.Half_Cycle::instruction;
     return true;
@@ -163,7 +168,7 @@ OPERATION_STEP(Instruction_Address_to_Address_Register,
 
 OPERATION_STEP(Enable_Program_Register,
 {
-    std::cerr << "enable PR\n";
+    LOG(trace) << "enable PR";
     return true;
 })
 
@@ -171,7 +176,7 @@ OPERATION_STEP(Enable_Distributor, { return true; });
 
 OPERATION_STEP(Data_to_Distributor,
 {
-    std::cerr << c.m_run_time << " Data to Dist\n";
+    LOG(trace) << c.m_run_time << " Data to Dist";
     Address addr;
     switch (op)
     {
@@ -193,11 +198,11 @@ OPERATION_STEP(Data_to_Distributor,
         break;
     }
 
-    std::cerr << "  addr=" << c.m_address_register << std::endl;
+    LOG(trace) << "  addr=" << c.m_address_register;
     if (index_of_address(c.m_address_register) == c.m_drum.index())
     {
         c.m_distributor = c.get_storage(c.m_address_register);
-        std::cerr << "  dist=" << c.m_distributor << std::endl;
+        LOG(trace) << "  dist=" << c.m_distributor;
         return true;
     }
     return false;
@@ -205,7 +210,7 @@ OPERATION_STEP(Data_to_Distributor,
 
 OPERATION_STEP(Distributor_to_Accumulator,
 {
-    std::cerr << c.m_run_time << " Dist to Acc: Dist=" << c.m_distributor << std::endl;
+    LOG(trace) << c.m_run_time << " Dist to Acc: Dist=" << c.m_distributor;
 
     // Wait for even time
     if (!c.m_restart && c.m_run_time % 2 != 0)
@@ -273,7 +278,7 @@ OPERATION_STEP(Distributor_to_Accumulator,
 
 OPERATION_STEP(Remove_Interlock_A,
 {
-    std::cerr << c.m_run_time << " remove interlock A\n";
+    LOG(trace) << c.m_run_time << " remove interlock A";
     c.m_restart = false;
     return true;
 })
@@ -282,8 +287,8 @@ OPERATION_STEP(Enable_Position_Set, { return true; })
 
 OPERATION_STEP(Store_Distributor,
 {
-    std::cerr << c.m_run_time << " store dist: addr=" << c.m_address_register
-              << " dist=" << c.m_distributor << std::endl;
+    LOG(trace) << c.m_run_time << " store dist: addr=" << c.m_address_register
+               << " dist=" << c.m_distributor;
 
     if (band_of_address(c.m_address_register) >= n_bands)
     {
@@ -407,7 +412,7 @@ private:
 
 OPERATION_STEP(Enable_Shift_Control,
 {
-    std::cerr << "Enable shift control\n";
+    LOG(trace) << "Enable shift control";
     // 1 word time + 1 if odd time
     return c.m_run_time % 2 == 0;
 })
@@ -628,7 +633,10 @@ Computer::Computer()
       m_clocking_error(false),
       m_error_sense(false),
       m_error_stop(false)
-{}
+{
+    boost::log::core::get()->set_filter(
+        boost::log::trivial::severity >= boost::log::trivial::info);
+}
 
 void Computer::power_on()
 {
@@ -759,7 +767,7 @@ void Computer::transfer()
 
 void Computer::program_start()
 {
-    std::cerr << "program start\n";
+    LOG(trace) << "program start";
     if (m_control_mode == Control_Mode::manual)
     {
         m_distributor = m_storage_entry;
@@ -790,7 +798,7 @@ void Computer::program_start()
     {
         if (m_half_cycle == Half_Cycle::instruction)
         {
-            std::cerr << "I\n";
+            LOG(trace) << "I";
             // Load the data address.
             Operation operation = Operation(m_operation_register.value());
             auto inst_seq = next_instruction_i_steps(*this, operation);
@@ -810,7 +818,7 @@ void Computer::program_start()
         if (m_half_cycle == Half_Cycle::data)
         {
             Operation operation = Operation(m_operation_register.value());
-            std::cerr << "D: op=" << static_cast<int>(operation) << std::endl;
+            LOG(trace) << "D: op=" << static_cast<int>(operation);
             m_operation_register.clear();
 
             bool restarted = false;

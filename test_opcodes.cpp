@@ -1,7 +1,6 @@
-#include <boost/test/unit_test.hpp>
-
 #include "computer.hpp"
 #include "test_fixture.hpp"
+#include "doctest.h"
 
 using namespace IBM650;
 
@@ -78,7 +77,7 @@ const Address Opcode_Fixture::stop_address = Address({0,0,2,0});
 
 
 // 69  LD  Load Distributor
-BOOST_AUTO_TEST_CASE(load_distributor_drum)
+TEST_CASE("load distributor from drum")
 {
     Word data({0,0, 0,0,1,2, 3,4,5,6, '+'});
     Address addr({1,0,0,0});
@@ -88,12 +87,12 @@ BOOST_AUTO_TEST_CASE(load_distributor_drum)
 
     Opcode_Fixture f(69, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(load_distributor_upper)
+TEST_CASE("load distributor from upper accumulator")
 {
     Word data({0,0, 0,0,1,2, 3,4,5,6, '+'});
     Address addr({8,0,0,3});
@@ -105,12 +104,12 @@ BOOST_AUTO_TEST_CASE(load_distributor_upper)
 
     Opcode_Fixture f(69, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), new_distr);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.distributor() == new_distr);
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(load_distributor_lower)
+TEST_CASE("load distributor from lower accumulator")
 {
     Word data({0,0, 0,0,1,2, 3,4,5,6, '+'});
     Address addr({8,0,0,2});
@@ -120,456 +119,442 @@ BOOST_AUTO_TEST_CASE(load_distributor_lower)
 
     Opcode_Fixture f(69, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), lower);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.distributor() == lower);
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
 // 24  STD  Store Distributor
-BOOST_AUTO_TEST_CASE(store_distributor)
+TEST_CASE("store distributor")
 {
     Address addr({1,0,1,0});
     Word distr({0,0, 0,1,0,4, 2,6,6,6, '-'});
 
     Opcode_Fixture f(24, addr, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.drum(addr), distr);
+    CHECK(f.distributor() == distr);
+    CHECK(f.drum(addr) == distr);
 }
 
-BOOST_AUTO_TEST_CASE(store_distributor_800x)
+TEST_CASE("store distributor from 800x addresses")
 {
     { Opcode_Fixture f(24, Address({2,0,0,0}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(24, Address({8,0,0,3}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(24, Address({8,0,0,1}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(24, Address({8,0,0,2}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(24, Address({8,0,0,3}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
 }
 
 // 10  AU  Add to Upper
-BOOST_AUTO_TEST_CASE(add_to_upper_1)
+TEST_CASE("add to upper accumulator")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
-    Address addr({1,0,0,0});
-    Word upper({0,0, 0,0,4,5, 8,6,3,2, '+'});
-    Word lower({8,9, 4,2,7,1, 1,3,6,5, '+'});
-    Word distr(lower);
-    Word sum({0,0, 1,2,8,0, 4,3,1,0, '+'});
+    SUBCASE("add positive")
+    {
+        Address addr({1,0,0,0});
+        Word upper({0,0, 0,0,4,5, 8,6,3,2, '+'});
+        Word lower({8,9, 4,2,7,1, 1,3,6,5, '+'});
+        Word distr(lower);
+        Word sum({0,0, 1,2,8,0, 4,3,1,0, '+'});
 
-    Opcode_Fixture f(10, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK(!f.computer.overflow());
+        Opcode_Fixture f(10, data, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == data);
+        CHECK(f.upper() == sum);
+        CHECK(f.lower() == lower);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("add negative")
+    {
+        Address addr({1,0,0,0});
+        Word upper({0,0, 0,0,4,5, 8,6,3,2, '-'});
+        Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
+        Word distr(lower);
+        Word upper_sum({0,0, 1,1,8,8, 7,0,4,5, '-'});
+        Word lower_sum({1,0, 5,7,2,8, 8,6,3,5, '+'});
+
+        Opcode_Fixture f(10, data, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == data);
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("overflow")
+    {
+        Address addr({1,0,0,0});
+        Word upper({9,9, 8,9,3,7, 4,6,2,7, '+'});
+        Word lower({8,9, 4,2,7,1, 1,3,6,5, '+'});
+        Word distr(lower);
+        Word sum({0,0, 0,1,7,2, 0,3,0,5, '+'});
+
+        Opcode_Fixture f(10, data, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == data);
+        CHECK(f.upper() == sum);
+        CHECK(f.lower() == lower);
+        CHECK(f.computer.overflow());
+    }
+    SUBCASE("add upper accumulator to upper accumulator")
+    {
+        Address addr({8,0,0,3});
+        Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(lower);
+        Word sum({2,4, 6,9,1,3, 5,7,8,0, '+'});
+
+        Opcode_Fixture f(10, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == upper);
+        CHECK(f.upper() == sum);
+        CHECK(f.lower() == lower);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("add lower accumulator to upper accumulator")
+    {
+        Address addr({8,0,0,2});
+        Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(upper);
+        Word sum({5,0, 7,3,1,3, 5,7,8,0, '+'});
+
+        Opcode_Fixture f(10, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == lower);
+        CHECK(f.upper() == sum);
+        CHECK(f.lower() == lower);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("add distributor to upper accumulator")
+    {
+        Address addr({8,0,0,1});
+        Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(change_sign(upper));
+        Word sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+        Opcode_Fixture f(10, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == distr);
+        CHECK(f.upper() == sum);
+        CHECK(f.lower() == lower);
+        CHECK(!f.computer.overflow());
+    }
 }
-
-BOOST_AUTO_TEST_CASE(add_to_upper_2)
-{
-    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
-    Address addr({1,0,0,0});
-    Word upper({0,0, 0,0,4,5, 8,6,3,2, '-'});
-    Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
-    Word distr(lower);
-    Word upper_sum({0,0, 1,1,8,8, 7,0,4,5, '-'});
-    Word lower_sum({1,0, 5,7,2,8, 8,6,3,5, '+'});
-
-    Opcode_Fixture f(10, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(add_to_upper_3)
-{
-    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
-    Address addr({1,0,0,0});
-    Word upper({9,9, 8,9,3,7, 4,6,2,7, '+'});
-    Word lower({8,9, 4,2,7,1, 1,3,6,5, '+'});
-    Word distr(lower);
-    Word sum({0,0, 0,1,7,2, 0,3,0,5, '+'});
-
-    Opcode_Fixture f(10, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK(f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(add_to_upper_8003)
-{
-    Address addr({8,0,0,3});
-    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(lower);
-    Word sum({2,4, 6,9,1,3, 5,7,8,0, '+'});
-
-    Opcode_Fixture f(10, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), upper);
-    BOOST_CHECK_EQUAL(f.upper(), sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(add_to_upper_8002)
-{
-    Address addr({8,0,0,2});
-    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(upper);
-    Word sum({5,0, 7,3,1,3, 5,7,8,0, '+'});
-
-    Opcode_Fixture f(10, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), lower);
-    BOOST_CHECK_EQUAL(f.upper(), sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(add_to_upper_8001)
-{
-    Address addr({8,0,0,1});
-    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(change_sign(upper));
-    Word sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
-
-    Opcode_Fixture f(10, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
 // 15  AL  Add to Lower
-BOOST_AUTO_TEST_CASE(add_to_lower_1)
+TEST_CASE("add to lower")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
-    Address addr({1,0,0,0});
-    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
-    Word lower({9,9, 8,9,3,7, 4,6,2,7, '+'});
-    Word distr(lower);
-    Word upper_sum({0,0, 0,0,0,0, 0,0,0,1, '+'});
-    Word lower_sum({0,0, 0,1,7,2, 0,3,0,5, '+'});
+    SUBCASE("add positive")
+    {
+        Address addr({1,0,0,0});
+        Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+        Word lower({9,9, 8,9,3,7, 4,6,2,7, '+'});
+        Word distr(lower);
+        Word upper_sum({0,0, 0,0,0,0, 0,0,0,1, '+'});
+        Word lower_sum({0,0, 0,1,7,2, 0,3,0,5, '+'});
 
-    Opcode_Fixture f(15, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+        Opcode_Fixture f(15, data, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == data);
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("add negative")
+    {
+        Address addr({1,0,0,0});
+        Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
+        Word lower({9,9, 8,9,3,7, 4,6,2,7, '-'});
+        Word distr(lower);
+        Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '-'});
+        Word lower_sum({9,9, 7,7,0,2, 8,9,4,9, '-'});
+
+        Opcode_Fixture f(15, data, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == data);
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("carry to upper accumulator")
+    {
+        Address addr({1,0,0,0});
+        Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
+        Word lower({9,9, 8,9,3,7, 4,6,2,7, '-'});
+        Word distr(lower);
+        Word upper_sum({0,0, 0,0,0,0, 0,0,0,1, '-'});
+        Word lower_sum({0,0, 0,1,7,2, 0,3,0,5, '-'});
+
+        Opcode_Fixture f(15, change_sign(data), addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == change_sign(data));
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("add upper accumulator to lower accumulator")
+    {
+        Address addr({8,0,0,3});
+        Word upper({9,8, 7,6,5,4, 3,2,1,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(lower);
+        Word upper_sum({9,8, 7,6,5,4, 3,2,1,1, '+'});
+        Word lower_sum({3,7, 1,5,1,1, 1,1,0,0, '+'});
+
+        Opcode_Fixture f(15, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == upper);
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("add lower accumulator to lower accumulator")
+    {
+        Address addr({8,0,0,2});
+        Word upper({9,8, 7,6,5,4, 3,2,1,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(lower);
+        Word lower_sum({7,6, 7,7,1,3, 5,7,8,0, '+'});
+
+        Opcode_Fixture f(15, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == lower);
+        CHECK(f.upper() == upper);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("add distributor to lower accumulator")
+    {
+        Address addr({8,0,0,1});
+        Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(change_sign(lower));
+        Word lower_sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
+
+        Opcode_Fixture f(15, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == distr);
+        CHECK(f.upper() == upper);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
 }
-
-BOOST_AUTO_TEST_CASE(add_to_lower_2)
-{
-    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
-    Address addr({1,0,0,0});
-    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
-    Word lower({9,9, 8,9,3,7, 4,6,2,7, '-'});
-    Word distr(lower);
-    Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '-'});
-    Word lower_sum({9,9, 7,7,0,2, 8,9,4,9, '-'});
-
-    Opcode_Fixture f(15, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(add_to_lower_3)
-{
-    Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
-    Address addr({1,0,0,0});
-    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
-    Word lower({9,9, 8,9,3,7, 4,6,2,7, '-'});
-    Word distr(lower);
-    Word upper_sum({0,0, 0,0,0,0, 0,0,0,1, '-'});
-    Word lower_sum({0,0, 0,1,7,2, 0,3,0,5, '-'});
-
-    Opcode_Fixture f(15, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(add_to_lower_8003)
-{
-    Address addr({8,0,0,3});
-    Word upper({9,8, 7,6,5,4, 3,2,1,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(lower);
-    Word upper_sum({9,8, 7,6,5,4, 3,2,1,1, '+'});
-    Word lower_sum({3,7, 1,5,1,1, 1,1,0,0, '+'});
-
-    Opcode_Fixture f(15, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), upper);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(add_to_lower_8002)
-{
-    Address addr({8,0,0,2});
-    Word upper({9,8, 7,6,5,4, 3,2,1,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(lower);
-    Word lower_sum({7,6, 7,7,1,3, 5,7,8,0, '+'});
-
-    Opcode_Fixture f(15, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), lower);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(add_to_lower_8001)
-{
-    Address addr({8,0,0,1});
-    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(change_sign(lower));
-    Word lower_sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
-
-    Opcode_Fixture f(15, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
 // 11  SU  Subtract from Upper
-BOOST_AUTO_TEST_CASE(subtract_from_upper_1)
+TEST_CASE("subtract from upper")
 {
-    Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
-    Address addr({1,0,0,0});
-    Word upper({0,0, 0,0,4,5, 8,6,3,2, '-'});
-    Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
-    Word distr(lower);
-    Word upper_sum({0,0, 1,1,8,8, 7,0,4,5, '-'});
-    Word lower_sum({1,0, 5,7,2,8, 8,6,3,5, '+'});
+    SUBCASE("subtract negative from negative accumulator")
+    {
+        Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
+        Address addr({1,0,0,0});
+        Word upper({0,0, 0,0,4,5, 8,6,3,2, '-'});
+        Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
+        Word distr(lower);
+        Word upper_sum({0,0, 1,1,8,8, 7,0,4,5, '-'});
+        Word lower_sum({1,0, 5,7,2,8, 8,6,3,5, '+'});
 
-    Opcode_Fixture f(11, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
+        Opcode_Fixture f(11, data, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == data);
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("subtract positive from negative accumulator")
+    {
+        Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+        Address addr({1,0,0,0});
+        Word upper({0,0, 0,0,4,5, 8,6,3,2, '-'});
+        Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
+        Word distr(upper);
+        Word upper_sum({0,0, 1,2,8,0, 4,3,1,0, '-'});
+        Word lower_sum({8,9, 4,2,7,1, 1,3,6,5, '-'});
 
-BOOST_AUTO_TEST_CASE(subtract_from_upper_2)
-{
-    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
-    Address addr({1,0,0,0});
-    Word upper({0,0, 0,0,4,5, 8,6,3,2, '-'});
-    Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
-    Word distr(upper);
-    Word upper_sum({0,0, 1,2,8,0, 4,3,1,0, '-'});
-    Word lower_sum({8,9, 4,2,7,1, 1,3,6,5, '-'});
+        Opcode_Fixture f(11, data, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == data);
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("overflow")
+    {
+        Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+        Address addr({1,0,0,0});
+        Word upper({9,9, 8,9,3,7, 4,6,2,7, '-'});
+        Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
+        Word distr(upper);
+        Word sum({0,0, 0,1,7,2, 0,3,0,5, '-'});
 
-    Opcode_Fixture f(11, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
+        Opcode_Fixture f(11, data, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == data);
+        CHECK(f.upper() == sum);
+        CHECK(f.lower() == lower);
+        CHECK(f.computer.overflow());
+    }
+    SUBCASE("subtract upper accumulator from upper accumulator")
+    {
+        Address addr({8,0,0,3});
+        Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(lower);
+        Word sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
 
-BOOST_AUTO_TEST_CASE(subtract_from_upper_3)
-{
-    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
-    Address addr({1,0,0,0});
-    Word upper({9,9, 8,9,3,7, 4,6,2,7, '-'});
-    Word lower({8,9, 4,2,7,1, 1,3,6,5, '-'});
-    Word distr(upper);
-    Word sum({0,0, 0,1,7,2, 0,3,0,5, '-'});
+        Opcode_Fixture f(11, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == upper);
+        CHECK(f.upper() == sum);
+        CHECK(f.lower() == lower);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("subtract lower accumulator from upper accumulator")
+    {
+        Address addr({8,0,0,2});
+        Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(upper);
+        Word upper_sum({2,6, 0,3,9,9, 9,9,9,9, '+'});
+        Word lower_sum({6,1, 6,1,4,3, 2,1,1,0, '-'});
 
-    Opcode_Fixture f(11, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK(f.computer.overflow());
-}
+        Opcode_Fixture f(11, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == lower);
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("subtract distributor from upper accumulator")
+    {
+        Address addr({8,0,0,1});
+        Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(upper);
+        Word sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
 
-BOOST_AUTO_TEST_CASE(subtract_from_upper_8003)
-{
-    Address addr({8,0,0,3});
-    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(lower);
-    Word sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
-
-    Opcode_Fixture f(11, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), upper);
-    BOOST_CHECK_EQUAL(f.upper(), sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(subtract_from_upper_8002)
-{
-    Address addr({8,0,0,2});
-    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(upper);
-    Word upper_sum({2,6, 0,3,9,9, 9,9,9,9, '+'});
-    Word lower_sum({6,1, 6,1,4,3, 2,1,1,0, '-'});
-
-    Opcode_Fixture f(11, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), lower);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(subtract_from_upper_8001)
-{
-    Address addr({8,0,0,1});
-    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(upper);
-    Word sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
-
-    Opcode_Fixture f(11, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK(!f.computer.overflow());
+        Opcode_Fixture f(11, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == distr);
+        CHECK(f.upper() == sum);
+        CHECK(f.lower() == lower);
+        CHECK(!f.computer.overflow());
+    }
 }
 
 // 16  SL  Subtract from Lower
-BOOST_AUTO_TEST_CASE(subtract_from_lower_1)
+TEST_CASE("subtract from lower")
 {
-    Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
-    Address addr({1,0,0,0});
-    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
-    Word lower({9,9, 8,9,3,7, 4,6,2,7, '+'});
-    Word distr(lower);
-    Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
-    Word lower_sum({9,9, 7,7,0,2, 8,9,4,9, '+'});
+    SUBCASE("subtract positive")
+    {
+        Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
+        Address addr({1,0,0,0});
+        Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+        Word lower({9,9, 8,9,3,7, 4,6,2,7, '+'});
+        Word distr(lower);
+        Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
+        Word lower_sum({9,9, 7,7,0,2, 8,9,4,9, '+'});
 
-    Opcode_Fixture f(16, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
+        Opcode_Fixture f(16, data, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == data);
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("subtract negative carry to upper accumalator")
+    {
+        Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
+        Address addr({1,0,0,0});
+        Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
+        Word lower({9,9, 8,9,3,7, 4,6,2,7, '+'});
+        Word distr(lower);
+        Word upper_sum({0,0, 0,0,0,0, 0,0,0,1, '+'});
+        Word lower_sum({0,0, 0,1,7,2, 0,3,0,5, '+'});
 
-BOOST_AUTO_TEST_CASE(subtract_from_lower_2)
-{
-    Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
-    Address addr({1,0,0,0});
-    Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
-    Word lower({9,9, 8,9,3,7, 4,6,2,7, '+'});
-    Word distr(lower);
-    Word upper_sum({0,0, 0,0,0,0, 0,0,0,1, '+'});
-    Word lower_sum({0,0, 0,1,7,2, 0,3,0,5, '+'});
+        Opcode_Fixture f(16, data, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == data);
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("subtract negative")
+    {
+        Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
+        Address addr({1,0,0,0});
+        Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
+        Word lower({9,9, 8,9,3,7, 4,6,2,7, '-'});
+        Word distr(lower);
+        Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '-'});
+        Word lower_sum({9,9, 7,7,0,2, 8,9,4,9, '-'});
 
-    Opcode_Fixture f(16, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
+        Opcode_Fixture f(16, data, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == data);
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("subtract upper accumulator from lower accumulator")
+    {
+        Address addr({8,0,0,3});
+        Word upper({9,8, 7,6,5,4, 3,2,1,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(lower);
+        Word upper_sum({9,8, 7,6,5,4, 3,2,0,9, '+'});
+        Word lower_sum({3,9, 6,2,0,2, 4,6,8,0, '+'});
 
-BOOST_AUTO_TEST_CASE(subtract_from_lower_3)
-{
-    Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
-    Address addr({1,0,0,0});
-    Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
-    Word lower({9,9, 8,9,3,7, 4,6,2,7, '-'});
-    Word distr(lower);
-    Word upper_sum({0,0, 0,0,0,0, 0,0,0,0, '-'});
-    Word lower_sum({9,9, 7,7,0,2, 8,9,4,9, '-'});
+        Opcode_Fixture f(16, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == upper);
+        CHECK(f.upper() == upper_sum);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("subtract lower accumulator from lower accumulator")
+    {
+        Address addr({8,0,0,2});
+        Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(lower);
+        Word lower_sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
 
-    Opcode_Fixture f(16, data, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
+        Opcode_Fixture f(16, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == lower);
+        CHECK(f.upper() == upper);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
+    SUBCASE("subtract distributor from lower accumulator")
+    {
+        Address addr({8,0,0,1});
+        Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
+        Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
+        Word distr(lower);
+        Word lower_sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
 
-BOOST_AUTO_TEST_CASE(subtract_from_lower_8003)
-{
-    Address addr({8,0,0,3});
-    Word upper({9,8, 7,6,5,4, 3,2,1,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(lower);
-    Word upper_sum({9,8, 7,6,5,4, 3,2,0,9, '+'});
-    Word lower_sum({3,9, 6,2,0,2, 4,6,8,0, '+'});
-
-    Opcode_Fixture f(16, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), upper);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(subtract_from_lower_8002)
-{
-    Address addr({8,0,0,2});
-    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(lower);
-    Word lower_sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
-
-    Opcode_Fixture f(16, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), lower);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
-}
-
-BOOST_AUTO_TEST_CASE(subtract_from_lower_8001)
-{
-    Address addr({8,0,0,1});
-    Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
-    Word lower({3,8, 3,8,5,6, 7,8,9,0, '+'});
-    Word distr(lower);
-    Word lower_sum({0,0, 0,0,0,0, 0,0,0,0, '+'});
-
-    Opcode_Fixture f(16, distr, addr, upper, lower, distr);
-    f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+        Opcode_Fixture f(16, distr, addr, upper, lower, distr);
+        f.run();
+        CHECK(f.distributor() == distr);
+        CHECK(f.upper() == upper);
+        CHECK(f.lower() == lower_sum);
+        CHECK(!f.computer.overflow());
+    }
 }
 
 // 60  RAU  Reset and Add into Upper
-BOOST_AUTO_TEST_CASE(reset_and_add_into_upper_1)
+TEST_CASE("reset and add into upper 1")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -581,13 +566,13 @@ BOOST_AUTO_TEST_CASE(reset_and_add_into_upper_1)
 
     Opcode_Fixture f(60, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_add_into_upper_2)
+TEST_CASE("reset and add into upper 2")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
     Address addr({1,0,0,0});
@@ -599,13 +584,13 @@ BOOST_AUTO_TEST_CASE(reset_and_add_into_upper_2)
 
     Opcode_Fixture f(60, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_add_into_upper_8003)
+TEST_CASE("reset and add into upper 8003")
 {
     Address addr({8,0,0,3});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -616,13 +601,13 @@ BOOST_AUTO_TEST_CASE(reset_and_add_into_upper_8003)
 
     Opcode_Fixture f(60, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), upper);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == upper);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_add_into_upper_8002)
+TEST_CASE("reset and add into upper 8002")
 {
     Address addr({8,0,0,2});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -633,13 +618,13 @@ BOOST_AUTO_TEST_CASE(reset_and_add_into_upper_8002)
 
     Opcode_Fixture f(60, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), lower);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == lower);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_add_into_upper_8001)
+TEST_CASE("reset and add into upper 8001")
 {
     Address addr({8,0,0,1});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -650,14 +635,14 @@ BOOST_AUTO_TEST_CASE(reset_and_add_into_upper_8001)
 
     Opcode_Fixture f(60, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
 // 65  RAL  Reset and Add into Lower
-BOOST_AUTO_TEST_CASE(reset_and_add_into_lower_1)
+TEST_CASE("reset and add into lower 1")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -669,13 +654,13 @@ BOOST_AUTO_TEST_CASE(reset_and_add_into_lower_1)
 
     Opcode_Fixture f(65, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_add_into_lower_2)
+TEST_CASE("reset and add into lower 2")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
     Address addr({1,0,0,0});
@@ -687,13 +672,13 @@ BOOST_AUTO_TEST_CASE(reset_and_add_into_lower_2)
 
     Opcode_Fixture f(65, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_add_into_lower_8003)
+TEST_CASE("reset and add into lower 8003")
 {
     Address addr({8,0,0,3});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -704,13 +689,13 @@ BOOST_AUTO_TEST_CASE(reset_and_add_into_lower_8003)
 
     Opcode_Fixture f(65, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), upper);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == upper);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_add_into_lower_8002)
+TEST_CASE("reset and add into lower 8002")
 {
     Address addr({8,0,0,2});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -721,13 +706,13 @@ BOOST_AUTO_TEST_CASE(reset_and_add_into_lower_8002)
 
     Opcode_Fixture f(65, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), lower);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == lower);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_add_into_lower_8001)
+TEST_CASE("reset and add into lower 8001")
 {
     Address addr({8,0,0,1});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -738,14 +723,14 @@ BOOST_AUTO_TEST_CASE(reset_and_add_into_lower_8001)
 
     Opcode_Fixture f(65, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
 // 61  RSU  Reset and Subtract into Upper
-BOOST_AUTO_TEST_CASE(reset_and_subtract_into_upper_1)
+TEST_CASE("reset and subtract into upper 1")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -757,13 +742,13 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_into_upper_1)
 
     Opcode_Fixture f(61, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_subtract_into_upper_2)
+TEST_CASE("reset and subtract into upper 2")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
     Address addr({1,0,0,0});
@@ -775,13 +760,13 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_into_upper_2)
 
     Opcode_Fixture f(61, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_subtract_into_upper_8003)
+TEST_CASE("reset and subtract into upper 8003")
 {
     Address addr({8,0,0,3});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -792,13 +777,13 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_into_upper_8003)
 
     Opcode_Fixture f(61, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), upper);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == upper);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_subtract_into_upper_8002)
+TEST_CASE("reset and subtract into upper 8002")
 {
     Address addr({8,0,0,2});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -809,13 +794,13 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_into_upper_8002)
 
     Opcode_Fixture f(61, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), lower);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == lower);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_subtract_into_upper_8001)
+TEST_CASE("reset and subtract into upper 8001")
 {
     Address addr({8,0,0,1});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -826,14 +811,14 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_into_upper_8001)
 
     Opcode_Fixture f(61, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
 // 66  RSL  Reset and Add into Lower
-BOOST_AUTO_TEST_CASE(reset_and_subtract_into_lower_1)
+TEST_CASE("reset and subtract into lower 1")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -845,13 +830,13 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_into_lower_1)
 
     Opcode_Fixture f(66, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_subtract_into_lower_2)
+TEST_CASE("reset and subtract into lower 2")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
     Address addr({1,0,0,0});
@@ -863,13 +848,13 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_into_lower_2)
 
     Opcode_Fixture f(66, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_subtract_into_lower_8003)
+TEST_CASE("reset and subtract into lower 8003")
 {
     Address addr({8,0,0,3});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -880,13 +865,13 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_into_lower_8003)
 
     Opcode_Fixture f(66, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), upper);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == upper);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_subtract_into_lower_8002)
+TEST_CASE("reset and subtract into lower 8002")
 {
     Address addr({8,0,0,2});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '-'});
@@ -897,13 +882,13 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_into_lower_8002)
 
     Opcode_Fixture f(66, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), lower);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == lower);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_subtract_into_lower_8001)
+TEST_CASE("reset and subtract into lower 8001")
 {
     Address addr({8,0,0,1});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -914,14 +899,14 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_into_lower_8001)
 
     Opcode_Fixture f(66, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
 // 20  STL  Store Lower in Memory
-BOOST_AUTO_TEST_CASE(store_lower_in_memory)
+TEST_CASE("store lower in memory")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -931,33 +916,33 @@ BOOST_AUTO_TEST_CASE(store_lower_in_memory)
 
     Opcode_Fixture f(20, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), lower);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK_EQUAL(f.drum(addr), lower);
+    CHECK(f.distributor() == lower);
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
+    CHECK(f.drum(addr) == lower);
 }
 
-BOOST_AUTO_TEST_CASE(store_lower_in_memory_800x)
+TEST_CASE("store lower in memory 800x")
 {
     { Opcode_Fixture f(20, Address({2,0,0,0}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(20, Address({8,0,0,3}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(20, Address({8,0,0,1}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(20, Address({8,0,0,2}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(20, Address({8,0,0,3}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
 }
 
 // 21  STU  Store Upper in Memory
-BOOST_AUTO_TEST_CASE(store_upper_in_memory_1)
+TEST_CASE("store upper in memory 1")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -967,13 +952,13 @@ BOOST_AUTO_TEST_CASE(store_upper_in_memory_1)
 
     Opcode_Fixture f(21, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), upper);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK_EQUAL(f.drum(addr), upper);
+    CHECK(f.distributor() == upper);
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
+    CHECK(f.drum(addr) == upper);
 }
 
-BOOST_AUTO_TEST_CASE(store_upper_in_memory_2)
+TEST_CASE("store upper in memory 2")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -983,13 +968,13 @@ BOOST_AUTO_TEST_CASE(store_upper_in_memory_2)
 
     Opcode_Fixture f(21, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), upper);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK_EQUAL(f.drum(addr), upper);
+    CHECK(f.distributor() == upper);
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
+    CHECK(f.drum(addr) == upper);
 }
 
-BOOST_AUTO_TEST_CASE(store_upper_in_memory_3)
+TEST_CASE("store upper in memory 3")
 {
     Word data({0,1, 3,6,5,4, 3,2,1,0, '+'});
     Address addr({1,0,0,0});
@@ -999,33 +984,33 @@ BOOST_AUTO_TEST_CASE(store_upper_in_memory_3)
 
     Opcode_Fixture f(21, distr, addr, remainder, quotient, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), remainder);
-    BOOST_CHECK_EQUAL(f.upper(), remainder);
-    BOOST_CHECK_EQUAL(f.lower(), quotient);
-    BOOST_CHECK_EQUAL(f.drum(addr), remainder);
+    CHECK(f.distributor() == remainder);
+    CHECK(f.upper() == remainder);
+    CHECK(f.lower() == quotient);
+    CHECK(f.drum(addr) == remainder);
 }
 
-BOOST_AUTO_TEST_CASE(store_upper_in_memory_800x)
+TEST_CASE("store upper in memory 800x")
 {
     { Opcode_Fixture f(21, Address({2,0,0,0}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(21, Address({8,0,0,3}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(21, Address({8,0,0,1}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(21, Address({8,0,0,2}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(21, Address({8,0,0,3}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
 }
 
 // 22  STDA  Store Lower Data Address
-BOOST_AUTO_TEST_CASE(store_lower_data_address)
+TEST_CASE("store lower data address")
 {
     Word data({6,9, 1,9,4,6, 0,6,0,0, '+'});
     Address addr({0,1,0,0});
@@ -1036,33 +1021,33 @@ BOOST_AUTO_TEST_CASE(store_lower_data_address)
 
     Opcode_Fixture f(22, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), store);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK_EQUAL(f.drum(addr), store);
+    CHECK(f.distributor() == store);
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
+    CHECK(f.drum(addr) == store);
 }
 
-BOOST_AUTO_TEST_CASE(store_lower_data_address_800x)
+TEST_CASE("store lower data address 800x")
 {
     { Opcode_Fixture f(22, Address({2,0,0,0}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(22, Address({8,0,0,3}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(22, Address({8,0,0,1}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(22, Address({8,0,0,2}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(22, Address({8,0,0,3}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
 }
 
 // 23  STDA  Store Lower Instruction Address
-BOOST_AUTO_TEST_CASE(store_lower_instruction_address)
+TEST_CASE("store lower instruction address")
 {
     Word data({6,9, 1,8,0,0, 0,7,1,5, '+'});
     Address addr({0,1,0,0});
@@ -1073,33 +1058,33 @@ BOOST_AUTO_TEST_CASE(store_lower_instruction_address)
 
     Opcode_Fixture f(23, distr, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), store);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
-    BOOST_CHECK_EQUAL(f.drum(addr), store);
+    CHECK(f.distributor() == store);
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
+    CHECK(f.drum(addr) == store);
 }
 
-BOOST_AUTO_TEST_CASE(store_lower_instruction_address_800x)
+TEST_CASE("store lower instruction address 800x")
 {
     { Opcode_Fixture f(23, Address({2,0,0,0}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(23, Address({8,0,0,3}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(23, Address({8,0,0,1}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(23, Address({8,0,0,2}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
     { Opcode_Fixture f(23, Address({8,0,0,3}));
         f.run();
-        BOOST_CHECK(f.computer.storage_selection_error()); }
+        CHECK(f.computer.storage_selection_error()); }
 }
 
 // 17  AABL  Add Absolute to Lower
-BOOST_AUTO_TEST_CASE(add_absolute_to_lower_1)
+TEST_CASE("add absolute to lower 1")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -1111,13 +1096,13 @@ BOOST_AUTO_TEST_CASE(add_absolute_to_lower_1)
 
     Opcode_Fixture f(17, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(add_absolute_to_lower_2)
+TEST_CASE("add absolute to lower 2")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
     Address addr({1,0,0,0});
@@ -1129,13 +1114,13 @@ BOOST_AUTO_TEST_CASE(add_absolute_to_lower_2)
 
     Opcode_Fixture f(17, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(add_absolute_to_lower_3)
+TEST_CASE("add absolute to lower 3")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -1147,14 +1132,14 @@ BOOST_AUTO_TEST_CASE(add_absolute_to_lower_3)
 
     Opcode_Fixture f(15, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
 // 67  RAABL  Reset and Add Absolute into Lower
-BOOST_AUTO_TEST_CASE(reset_and_add_absolute_into_lower_1)
+TEST_CASE("reset and add absolute into lower 1")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
     Address addr({1,0,0,0});
@@ -1166,13 +1151,13 @@ BOOST_AUTO_TEST_CASE(reset_and_add_absolute_into_lower_1)
 
     Opcode_Fixture f(67, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_add_absolute_into_lower_2)
+TEST_CASE("reset and add absolute into lower 2")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -1184,14 +1169,14 @@ BOOST_AUTO_TEST_CASE(reset_and_add_absolute_into_lower_2)
 
     Opcode_Fixture f(67, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
 // 18  SABL  Subtract Absolute from Lower
-BOOST_AUTO_TEST_CASE(subtract_absolute_from_lower_1)
+TEST_CASE("subtract absolute from lower 1")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
     Address addr({1,0,0,0});
@@ -1203,13 +1188,13 @@ BOOST_AUTO_TEST_CASE(subtract_absolute_from_lower_1)
 
     Opcode_Fixture f(18, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(subtract_absolute_from_lower_2)
+TEST_CASE("subtract absolute from lower 2")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -1221,13 +1206,13 @@ BOOST_AUTO_TEST_CASE(subtract_absolute_from_lower_2)
 
     Opcode_Fixture f(18, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(subtract_absolute_from_lower_3)
+TEST_CASE("subtract absolute from lower 3")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -1239,14 +1224,14 @@ BOOST_AUTO_TEST_CASE(subtract_absolute_from_lower_3)
 
     Opcode_Fixture f(18, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
 // 68  RSABL  Reset and Subtract Absolute into Lower
-BOOST_AUTO_TEST_CASE(reset_and_subtract_absolute_into_lower_1)
+TEST_CASE("reset and subtract absolute into lower 1")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -1258,13 +1243,13 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_absolute_into_lower_1)
 
     Opcode_Fixture f(68, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(reset_and_subtract_absolute_into_lower_2)
+TEST_CASE("reset and subtract absolute into lower 2")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
     Address addr({1,0,0,0});
@@ -1276,14 +1261,14 @@ BOOST_AUTO_TEST_CASE(reset_and_subtract_absolute_into_lower_2)
 
     Opcode_Fixture f(68, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_sum);
-    BOOST_CHECK_EQUAL(f.lower(), lower_sum);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_sum);
+    CHECK(f.lower() == lower_sum);
+    CHECK(!f.computer.overflow());
 }
 
 // 19  MULT  Multiply
-BOOST_AUTO_TEST_CASE(multiply_1)
+TEST_CASE("multiply 1")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '+'});
     Address addr({1,0,0,0});
@@ -1295,13 +1280,13 @@ BOOST_AUTO_TEST_CASE(multiply_1)
 
     Opcode_Fixture f(19, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_product);
-    BOOST_CHECK_EQUAL(f.lower(), lower_product);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_product);
+    CHECK(f.lower() == lower_product);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(multiply_2)
+TEST_CASE("multiply 2")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
     Address addr({1,0,0,0});
@@ -1313,13 +1298,13 @@ BOOST_AUTO_TEST_CASE(multiply_2)
 
     Opcode_Fixture f(19, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_product);
-    BOOST_CHECK_EQUAL(f.lower(), lower_product);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_product);
+    CHECK(f.lower() == lower_product);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(multiply_3)
+TEST_CASE("multiply 3")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
     Address addr({1,0,0,0});
@@ -1331,13 +1316,13 @@ BOOST_AUTO_TEST_CASE(multiply_3)
 
     Opcode_Fixture f(19, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_product);
-    BOOST_CHECK_EQUAL(f.lower(), lower_product);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_product);
+    CHECK(f.lower() == lower_product);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(multiply_4)
+TEST_CASE("multiply 4")
 {
     Word data({0,0, 1,2,3,4, 5,6,7,8, '-'});
     Address addr({1,0,0,0});
@@ -1351,14 +1336,14 @@ BOOST_AUTO_TEST_CASE(multiply_4)
 
     Opcode_Fixture f(19, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), upper_product);
-    BOOST_CHECK_EQUAL(f.lower(), lower_product);
-    BOOST_CHECK( f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == upper_product);
+    CHECK(f.lower() == lower_product);
+    CHECK( f.computer.overflow());
 }
 
 // 14  DIV  Divide
-BOOST_AUTO_TEST_CASE(divide_1)
+TEST_CASE("divide 1")
 {
     Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
     Address addr({1,0,0,0});
@@ -1370,13 +1355,13 @@ BOOST_AUTO_TEST_CASE(divide_1)
 
     Opcode_Fixture f(14, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), remainder);
-    BOOST_CHECK_EQUAL(f.lower(), quotient);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == remainder);
+    CHECK(f.lower() == quotient);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(divide_2)
+TEST_CASE("divide 2")
 {
     Word data({0,0, 0,0,0,0, 0,1,2,5, '-'});
     Address addr({1,0,0,0});
@@ -1388,13 +1373,13 @@ BOOST_AUTO_TEST_CASE(divide_2)
 
     Opcode_Fixture f(14, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), remainder);
-    BOOST_CHECK_EQUAL(f.lower(), quotient);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == remainder);
+    CHECK(f.lower() == quotient);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(divide_3)
+TEST_CASE("divide 3")
 {
     Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
     Address addr({1,0,0,0});
@@ -1406,13 +1391,13 @@ BOOST_AUTO_TEST_CASE(divide_3)
 
     Opcode_Fixture f(14, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), remainder);
-    BOOST_CHECK_EQUAL(f.lower(), quotient);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == remainder);
+    CHECK(f.lower() == quotient);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(divide_4)
+TEST_CASE("divide 4")
 {
     Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
     Address addr({1,0,0,0});
@@ -1426,14 +1411,14 @@ BOOST_AUTO_TEST_CASE(divide_4)
 
     Opcode_Fixture f(14, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), remainder);
-    BOOST_CHECK_EQUAL(f.lower(), quotient);
-    BOOST_CHECK(f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == remainder);
+    CHECK(f.lower() == quotient);
+    CHECK(f.computer.overflow());
 }
 
 // 64  DIV RU  Divide and Reset Upper
-BOOST_AUTO_TEST_CASE(divide_and_reset_upper_1)
+TEST_CASE("divide and reset upper 1")
 {
     Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
     Address addr({1,0,0,0});
@@ -1445,13 +1430,13 @@ BOOST_AUTO_TEST_CASE(divide_and_reset_upper_1)
 
     Opcode_Fixture f(64, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), remainder);
-    BOOST_CHECK_EQUAL(f.lower(), quotient);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == remainder);
+    CHECK(f.lower() == quotient);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(divide_and_reset_upper_2)
+TEST_CASE("divide and reset upper 2")
 {
     Word data({0,0, 0,0,0,0, 0,1,2,5, '-'});
     Address addr({1,0,0,0});
@@ -1463,13 +1448,13 @@ BOOST_AUTO_TEST_CASE(divide_and_reset_upper_2)
 
     Opcode_Fixture f(64, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), remainder);
-    BOOST_CHECK_EQUAL(f.lower(), quotient);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == remainder);
+    CHECK(f.lower() == quotient);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(divide_and_reset_upper_3)
+TEST_CASE("divide and reset upper 3")
 {
     Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
     Address addr({1,0,0,0});
@@ -1481,13 +1466,13 @@ BOOST_AUTO_TEST_CASE(divide_and_reset_upper_3)
 
     Opcode_Fixture f(64, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), remainder);
-    BOOST_CHECK_EQUAL(f.lower(), quotient);
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == remainder);
+    CHECK(f.lower() == quotient);
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(divide_and_reset_upper_4)
+TEST_CASE("divide and reset upper 4")
 {
     Word data({0,0, 0,0,0,0, 0,1,2,5, '+'});
     Address addr({1,0,0,0});
@@ -1501,10 +1486,10 @@ BOOST_AUTO_TEST_CASE(divide_and_reset_upper_4)
 
     Opcode_Fixture f(64, data, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), data);
-    BOOST_CHECK_EQUAL(f.upper(), remainder);
-    BOOST_CHECK_EQUAL(f.lower(), quotient);
-    BOOST_CHECK(f.computer.overflow());
+    CHECK(f.distributor() == data);
+    CHECK(f.upper() == remainder);
+    CHECK(f.lower() == quotient);
+    CHECK(f.computer.overflow());
 }
 
 struct Branch_Fixture : public Opcode_Fixture
@@ -1547,7 +1532,7 @@ struct Branch_Fixture : public Opcode_Fixture
 };
 
 // 44  BRNZU  Branch on Non-Zero in Upper
-BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_1)
+TEST_CASE("branch on non zero in upper 1")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 1,2,3,4, 5,6,7,8, '+'});
@@ -1556,12 +1541,12 @@ BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_1)
 
     Branch_Fixture f(44, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_2)
+TEST_CASE("branch on non zero in upper 2")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,1,2,3, '+'});
@@ -1570,12 +1555,12 @@ BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_2)
 
     Branch_Fixture f(44, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_3)
+TEST_CASE("branch on non zero in upper 3")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 1,2,3,4, 5,6,7,8, '-'});
@@ -1584,12 +1569,12 @@ BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_3)
 
     Branch_Fixture f(44, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_4)
+TEST_CASE("branch on non zero in upper 4")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -1598,12 +1583,12 @@ BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_4)
 
     Branch_Fixture f(44, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_5)
+TEST_CASE("branch on non zero in upper 5")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -1612,12 +1597,12 @@ BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_5)
 
     Branch_Fixture f(44, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_6)
+TEST_CASE("branch on non zero in upper 6")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1626,13 +1611,13 @@ BOOST_AUTO_TEST_CASE(branch_on_non_zero_in_upper_6)
 
     Branch_Fixture f(44, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
 // 45  BRNZ  Branch on Non-Zero
-BOOST_AUTO_TEST_CASE(branch_on_non_zero_1)
+TEST_CASE("branch on non zero 1")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,1,2,3, '+'});
@@ -1641,12 +1626,12 @@ BOOST_AUTO_TEST_CASE(branch_on_non_zero_1)
 
     Branch_Fixture f(45, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_non_zero_2)
+TEST_CASE("branch on non zero 2")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -1655,12 +1640,12 @@ BOOST_AUTO_TEST_CASE(branch_on_non_zero_2)
 
     Branch_Fixture f(45, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_non_zero_3)
+TEST_CASE("branch on non zero 3")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1669,12 +1654,12 @@ BOOST_AUTO_TEST_CASE(branch_on_non_zero_3)
 
     Branch_Fixture f(45, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_non_zero_4)
+TEST_CASE("branch on non zero 4")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -1683,12 +1668,12 @@ BOOST_AUTO_TEST_CASE(branch_on_non_zero_4)
 
     Branch_Fixture f(45, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_non_zero_5)
+TEST_CASE("branch on non zero 5")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1697,13 +1682,13 @@ BOOST_AUTO_TEST_CASE(branch_on_non_zero_5)
 
     Branch_Fixture f(45, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
 // 46  BRMIN  Branch on Minus
-BOOST_AUTO_TEST_CASE(branch_on_minus_1)
+TEST_CASE("branch on minus 1")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1712,12 +1697,12 @@ BOOST_AUTO_TEST_CASE(branch_on_minus_1)
 
     Branch_Fixture f(46, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_minus_2)
+TEST_CASE("branch on minus 2")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,1,2,3, '-'});
@@ -1726,12 +1711,12 @@ BOOST_AUTO_TEST_CASE(branch_on_minus_2)
 
     Branch_Fixture f(46, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_minus_3)
+TEST_CASE("branch on minus 3")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1740,12 +1725,12 @@ BOOST_AUTO_TEST_CASE(branch_on_minus_3)
 
     Branch_Fixture f(46, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_minus_4)
+TEST_CASE("branch on minus 4")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -1754,12 +1739,12 @@ BOOST_AUTO_TEST_CASE(branch_on_minus_4)
 
     Branch_Fixture f(46, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_minus_5)
+TEST_CASE("branch on minus 5")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -1768,12 +1753,12 @@ BOOST_AUTO_TEST_CASE(branch_on_minus_5)
 
     Branch_Fixture f(46, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_minus_6)
+TEST_CASE("branch on minus 6")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -1782,9 +1767,9 @@ BOOST_AUTO_TEST_CASE(branch_on_minus_6)
 
     Branch_Fixture f(46, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
 struct Branch_on_Overflow_Fixture : public Opcode_Fixture
@@ -1810,7 +1795,7 @@ struct Branch_on_Overflow_Fixture : public Opcode_Fixture
 };
 
 // 47  BROV  Branch on Overflow
-BOOST_AUTO_TEST_CASE(branch_on_overflow_1)
+TEST_CASE("branch on overflow 1")
 {
     Word upper({5,0, 0,0,0,0, 0,0,0,0, '+'});
     Word lower({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -1818,14 +1803,14 @@ BOOST_AUTO_TEST_CASE(branch_on_overflow_1)
 
     Branch_on_Overflow_Fixture f(10, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.computer.overflow());
-    BOOST_CHECK(f.did_branch());
+    CHECK(f.computer.overflow());
+    CHECK(f.did_branch());
     // Upper has the low 10 digits of 50... + the word at address 0040.
-    BOOST_CHECK_EQUAL(f.upper(), Word({1,9, 0,0,1,0, 0,0,3,0, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.upper() == Word({1,9, 0,0,1,0, 0,0,3,0, '+'}));
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_overflow_2)
+TEST_CASE("branch on overflow 2")
 {
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
     Word lower({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -1833,14 +1818,14 @@ BOOST_AUTO_TEST_CASE(branch_on_overflow_2)
 
     Branch_on_Overflow_Fixture f(10, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.computer.overflow());
-    BOOST_CHECK(!f.did_branch());
+    CHECK(!f.computer.overflow());
+    CHECK(!f.did_branch());
     // Upper has 0 + the word at address 0040.
-    BOOST_CHECK_EQUAL(f.upper(), Word({6,9, 0,0,1,0, 0,0,3,0, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.upper() == Word({6,9, 0,0,1,0, 0,0,3,0, '+'}));
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_overflow_3)
+TEST_CASE("branch on overflow 3")
 {
     Word upper({5,0, 0,0,0,0, 0,0,0,0, '+'});
     Word lower({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -1850,16 +1835,16 @@ BOOST_AUTO_TEST_CASE(branch_on_overflow_3)
     // Stop the program on overflow.
     f.computer.set_overflow_mode(Computer::Overflow_Mode::stop);
     f.run();
-    BOOST_CHECK(f.computer.overflow());
+    CHECK(f.computer.overflow());
     // No branch. Program stopped on overflow.
-    BOOST_CHECK(!f.did_branch());
+    CHECK(!f.did_branch());
     // Upper has the low 10 digits of 50... + the word at address 0040.
-    BOOST_CHECK_EQUAL(f.upper(), Word({1,9, 0,0,1,0, 0,0,3,0, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.upper() == Word({1,9, 0,0,1,0, 0,0,3,0, '+'}));
+    CHECK(f.lower() == lower);
 }
 
 // 90-99  BRD 1-10  Branch on 8 in Distributor Position 1-10
-BOOST_AUTO_TEST_CASE(branch_on_8_in_position_10_1)
+TEST_CASE("branch on 8 in position 10 1")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1868,13 +1853,13 @@ BOOST_AUTO_TEST_CASE(branch_on_8_in_position_10_1)
 
     Branch_Fixture f(90, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK(!f.error_stop());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(!f.error_stop());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_8_in_position_10_2)
+TEST_CASE("branch on 8 in position 10 2")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1883,13 +1868,13 @@ BOOST_AUTO_TEST_CASE(branch_on_8_in_position_10_2)
 
     Branch_Fixture f(90, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK(!f.error_stop());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(!f.error_stop());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_8_in_position_10_3)
+TEST_CASE("branch on 8 in position 10 3")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1898,13 +1883,13 @@ BOOST_AUTO_TEST_CASE(branch_on_8_in_position_10_3)
 
     Branch_Fixture f(90, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK(f.error_stop());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(f.error_stop());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_8_in_position_1_1)
+TEST_CASE("branch on 8 in position 1 1")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1913,13 +1898,13 @@ BOOST_AUTO_TEST_CASE(branch_on_8_in_position_1_1)
 
     Branch_Fixture f(91, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK(!f.error_stop());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(!f.error_stop());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_8_in_position_1_2)
+TEST_CASE("branch on 8 in position 1 2")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1928,13 +1913,13 @@ BOOST_AUTO_TEST_CASE(branch_on_8_in_position_1_2)
 
     Branch_Fixture f(91, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK(!f.error_stop());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(!f.error_stop());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_8_in_position_2_1)
+TEST_CASE("branch on 8 in position 2 1")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1943,13 +1928,13 @@ BOOST_AUTO_TEST_CASE(branch_on_8_in_position_2_1)
 
     Branch_Fixture f(92, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(f.did_branch());
-    BOOST_CHECK(!f.error_stop());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(f.did_branch());
+    CHECK(!f.error_stop());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
-BOOST_AUTO_TEST_CASE(branch_on_8_in_position_2_2)
+TEST_CASE("branch on 8 in position 2 2")
 {
     Address addr({1,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '-'});
@@ -1958,14 +1943,14 @@ BOOST_AUTO_TEST_CASE(branch_on_8_in_position_2_2)
 
     Branch_Fixture f(92, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK(!f.did_branch());
-    BOOST_CHECK(!f.error_stop());
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), lower);
+    CHECK(!f.did_branch());
+    CHECK(!f.error_stop());
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == lower);
 }
 
 // 30  SRT  Shift Right
-BOOST_AUTO_TEST_CASE(shift_right)
+TEST_CASE("shift right")
 {
     Address addr({0,0,0,2});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -1974,13 +1959,13 @@ BOOST_AUTO_TEST_CASE(shift_right)
 
     Opcode_Fixture f(30, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({0,0, 1,2,3,4, 5,6,7,8, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({9,0, 1,2,3,4, 5,6,7,8, '+'}));
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({0,0, 1,2,3,4, 5,6,7,8, '+'}));
+    CHECK(f.lower() == Word({9,0, 1,2,3,4, 5,6,7,8, '+'}));
 }
 
 // 31  SRD  Shift and Round
-BOOST_AUTO_TEST_CASE(shift_and_round_1)
+TEST_CASE("shift and round 1")
 {
     Address addr({0,0,0,2});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -1989,12 +1974,12 @@ BOOST_AUTO_TEST_CASE(shift_and_round_1)
 
     Opcode_Fixture f(31, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({0,0, 1,2,3,4, 5,6,7,8, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({9,0, 1,2,3,4, 5,6,7,9, '+'}));
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({0,0, 1,2,3,4, 5,6,7,8, '+'}));
+    CHECK(f.lower() == Word({9,0, 1,2,3,4, 5,6,7,9, '+'}));
 }
 
-BOOST_AUTO_TEST_CASE(shift_and_round_2)
+TEST_CASE("shift and round 2")
 {
     Address addr({0,0,0,0});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -2003,12 +1988,12 @@ BOOST_AUTO_TEST_CASE(shift_and_round_2)
 
     Opcode_Fixture f(31, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({1,2, 3,4,5,6, 7,8,9,0, '+'}));
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({0,0, 0,0,0,0, 0,0,0,0, '+'}));
+    CHECK(f.lower() == Word({1,2, 3,4,5,6, 7,8,9,0, '+'}));
 }
 
-BOOST_AUTO_TEST_CASE(shift_and_round_3)
+TEST_CASE("shift and round 3")
 {
     Address addr({0,0,5,5});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '-'});
@@ -2017,13 +2002,13 @@ BOOST_AUTO_TEST_CASE(shift_and_round_3)
 
     Opcode_Fixture f(31, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({0,0, 0,0,0,1, 2,3,4,5, '-'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({6,7, 8,9,0,1, 2,3,4,6, '-'}));
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({0,0, 0,0,0,1, 2,3,4,5, '-'}));
+    CHECK(f.lower() == Word({6,7, 8,9,0,1, 2,3,4,6, '-'}));
 }
 
 // 35  SLT  Shift Left
-BOOST_AUTO_TEST_CASE(shift_left)
+TEST_CASE("shift left")
 {
     Address addr({0,0,0,6});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -2032,29 +2017,29 @@ BOOST_AUTO_TEST_CASE(shift_left)
 
     Opcode_Fixture f(35, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({7,8, 9,0,1,2, 3,4,5,6, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({7,8, 9,0,0,0, 0,0,0,0, '+'}));
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({7,8, 9,0,1,2, 3,4,5,6, '+'}));
+    CHECK(f.lower() == Word({7,8, 9,0,0,0, 0,0,0,0, '+'}));
+    CHECK(!f.computer.overflow());
 }
 
 // 36  SCT  Shift Left and Count
-BOOST_AUTO_TEST_CASE(shift_left_and_count_1)
+TEST_CASE("shift left and count 1")
 {
-    Address addr({0,0,0,0});
+    Address addr({00,0,0});
     Word upper({0,0, 0,0,0,1, 2,3,4,5, '+'});
     Word lower({2,2, 2,2,2,5, 5,5,5,5, '+'});
     Word distr({0,0, 0,0,0,0, 0,0,0,0, '+'});
 
     Opcode_Fixture f(36, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,2, 2,2,2,2, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({5,5, 5,5,5,0, 0,0,0,5, '+'}));
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({1,2, 3,4,5,2, 2,2,2,2, '+'}));
+    CHECK(f.lower() == Word({5,5, 5,5,5,0, 0,0,0,5, '+'}));
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(shift_left_and_count_2)
+TEST_CASE("shift left and count 2")
 {
     Address addr({0,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -2063,13 +2048,13 @@ BOOST_AUTO_TEST_CASE(shift_left_and_count_2)
 
     Opcode_Fixture f(36, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,2, 2,2,2,2, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({0,0, 0,0,0,0, 0,0,1,0, '+'}));
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({1,2, 3,4,5,2, 2,2,2,2, '+'}));
+    CHECK(f.lower() == Word({0,0, 0,0,0,0, 0,0,1,0, '+'}));
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(shift_left_and_count_3)
+TEST_CASE("shift left and count 3")
 {
     Address addr({0,0,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -2078,13 +2063,13 @@ BOOST_AUTO_TEST_CASE(shift_left_and_count_3)
 
     Opcode_Fixture f(36, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({0,0, 1,2,3,4, 5,2,2,2, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({0,0, 0,0,0,0, 0,0,1,0, '+'}));
-    BOOST_CHECK(f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({0,0, 1,2,3,4, 5,2,2,2, '+'}));
+    CHECK(f.lower() == Word({0,0, 0,0,0,0, 0,0,1,0, '+'}));
+    CHECK(f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(shift_left_and_count_4)
+TEST_CASE("shift left and count 4")
 {
     Address addr({0,0,0,0});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -2093,13 +2078,13 @@ BOOST_AUTO_TEST_CASE(shift_left_and_count_4)
 
     Opcode_Fixture f(36, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,6, 7,8,9,0, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({2,2, 2,2,2,5, 5,5,0,0, '+'}));
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({1,2, 3,4,5,6, 7,8,9,0, '+'}));
+    CHECK(f.lower() == Word({2,2, 2,2,2,5, 5,5,0,0, '+'}));
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(shift_left_and_count_5)
+TEST_CASE("shift left and count 5")
 {
     Address addr({0,0,0,0});
     Word upper({0,1, 2,3,4,5, 6,7,8,9, '+'});
@@ -2108,13 +2093,13 @@ BOOST_AUTO_TEST_CASE(shift_left_and_count_5)
 
     Opcode_Fixture f(36, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,6, 7,8,9,2, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({2,2, 2,2,5,5, 5,5,0,1, '+'}));
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({1,2, 3,4,5,6, 7,8,9,2, '+'}));
+    CHECK(f.lower() == Word({2,2, 2,2,5,5, 5,5,0,1, '+'}));
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(shift_left_and_count_6)
+TEST_CASE("shift left and count 6")
 {
     Address addr({0,0,0,6});
     Word upper({0,0, 0,0,1,2, 3,4,5,6, '+'});
@@ -2123,13 +2108,13 @@ BOOST_AUTO_TEST_CASE(shift_left_and_count_6)
 
     Opcode_Fixture f(36, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,6, 2,2,2,2, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({2,5, 5,5,5,5, 0,0,0,8, '+'}));
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({1,2, 3,4,5,6, 2,2,2,2, '+'}));
+    CHECK(f.lower() == Word({2,5, 5,5,5,5, 0,0,0,8, '+'}));
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(shift_left_and_count_7)
+TEST_CASE("shift left and count 7")
 {
     Address addr({0,0,0,6});
     Word upper({0,0, 0,0,0,0, 1,2,3,4, '+'});
@@ -2138,13 +2123,13 @@ BOOST_AUTO_TEST_CASE(shift_left_and_count_7)
 
     Opcode_Fixture f(36, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,2,2, 2,2,2,5, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({5,5, 5,5,0,0, 0,0,1,0, '+'}));
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({1,2, 3,4,2,2, 2,2,2,5, '+'}));
+    CHECK(f.lower() == Word({5,5, 5,5,0,0, 0,0,1,0, '+'}));
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(shift_left_and_count_8)
+TEST_CASE("shift left and count 8")
 {
     Address addr({0,0,0,6});
     Word upper({0,0, 0,0,0,0, 0,1,2,3, '+'});
@@ -2153,13 +2138,13 @@ BOOST_AUTO_TEST_CASE(shift_left_and_count_8)
 
     Opcode_Fixture f(36, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({0,1, 2,3,2,2, 2,2,2,5, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({5,5, 5,5,0,0, 0,0,1,0, '+'}));
-    BOOST_CHECK(f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({0,1, 2,3,2,2, 2,2,2,5, '+'}));
+    CHECK(f.lower() == Word({5,5, 5,5,0,0, 0,0,1,0, '+'}));
+    CHECK(f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(shift_left_and_count_9)
+TEST_CASE("shift left and count 9")
 {
     Address addr({0,0,0,6});
     Word upper({1,2, 3,4,5,6, 7,8,9,0, '+'});
@@ -2168,13 +2153,13 @@ BOOST_AUTO_TEST_CASE(shift_left_and_count_9)
 
     Opcode_Fixture f(36, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,6, 7,8,9,0, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({2,2, 2,2,2,5, 5,5,0,0, '+'}));
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({1,2, 3,4,5,6, 7,8,9,0, '+'}));
+    CHECK(f.lower() == Word({2,2, 2,2,2,5, 5,5,0,0, '+'}));
+    CHECK(!f.computer.overflow());
 }
 
-BOOST_AUTO_TEST_CASE(shift_left_and_count_10)
+TEST_CASE("shift left and count 10")
 {
     Address addr({0,0,0,6});
     Word upper({0,1, 2,3,4,5, 6,7,8,9, '+'});
@@ -2183,10 +2168,10 @@ BOOST_AUTO_TEST_CASE(shift_left_and_count_10)
 
     Opcode_Fixture f(36, addr, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), Word({1,2, 3,4,5,6, 7,8,9,2, '+'}));
-    BOOST_CHECK_EQUAL(f.lower(), Word({2,2, 2,2,5,5, 5,5,0,5, '+'}));
-    BOOST_CHECK(!f.computer.overflow());
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == Word({1,2, 3,4,5,6, 7,8,9,2, '+'}));
+    CHECK(f.lower() == Word({2,2, 2,2,5,5, 5,5,0,5, '+'}));
+    CHECK(!f.computer.overflow());
 }
 
 struct Table_Fixture : public Opcode_Fixture
@@ -2211,7 +2196,7 @@ struct Table_Fixture : public Opcode_Fixture
 };
 
 // 84  TLU  Table Lookup
-BOOST_AUTO_TEST_CASE(table_lookup_1)
+TEST_CASE("table lookup 1")
 {
     Address addr({0,2,0,0});
     Word upper({0,0, 0,0,0,0, 0,0,0,0, '+'});
@@ -2221,12 +2206,12 @@ BOOST_AUTO_TEST_CASE(table_lookup_1)
 
     Table_Fixture f(addr, start, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), Word({6,5, 0,2,4,0, 0,5,5,4, '+'}));
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == Word({6,5, 0,2,4,0, 0,5,5,4, '+'}));
 }
 
-BOOST_AUTO_TEST_CASE(table_lookup_2)
+TEST_CASE("table lookup 2")
 {
     Address addr({0,2,1,5});
     Word upper({0,0, 0,0,0,1, 2,3,4,5, '+'});
@@ -2236,12 +2221,12 @@ BOOST_AUTO_TEST_CASE(table_lookup_2)
 
     Table_Fixture f(addr, start, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
-    BOOST_CHECK_EQUAL(f.lower(), Word({6,5, 0,2,5,5, 0,5,5,4, '+'}));
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == upper);
+    CHECK(f.lower() == Word({6,5, 0,2,5,5, 0,5,5,4, '+'}));
 }
 
-BOOST_AUTO_TEST_CASE(table_lookup_3)
+TEST_CASE("table lookup 3")
 {
     Address addr({0,2,1,5});
     Word upper({0,0, 0,0,0,1, 2,3,4,5, '+'});
@@ -2251,13 +2236,13 @@ BOOST_AUTO_TEST_CASE(table_lookup_3)
 
     Table_Fixture f(addr, start, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == upper);
     // Distributor is not an exact match, get the next higher address.
-    BOOST_CHECK_EQUAL(f.lower(), Word({6,5, 0,2,5,6, 0,5,5,4, '+'}));
+    CHECK(f.lower() == Word({6,5, 0,2,5,6, 0,5,5,4, '+'}));
 }
 
-BOOST_AUTO_TEST_CASE(table_lookup_4)
+TEST_CASE("table lookup 4")
 {
     Address addr({0,2,0,0});
     Word upper({0,0, 0,0,0,1, 2,3,4,5, '+'});
@@ -2267,8 +2252,8 @@ BOOST_AUTO_TEST_CASE(table_lookup_4)
 
     Table_Fixture f(addr, start, upper, lower, distr);
     f.run();
-    BOOST_CHECK_EQUAL(f.distributor(), distr);
-    BOOST_CHECK_EQUAL(f.upper(), upper);
+    CHECK(f.distributor() == distr);
+    CHECK(f.upper() == upper);
     // Can't match at address 0248 or 0249.
-    BOOST_CHECK_EQUAL(f.lower(), Word({6,5, 0,2,5,0, 0,5,5,4, '+'}));
+    CHECK(f.lower() == Word({6,5, 0,2,5,0, 0,5,5,4, '+'}));
 }
