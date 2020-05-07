@@ -68,6 +68,7 @@ public:
 
 private:
     void advance_read_cards();
+    void punch();
     Card_Deck m_read_hopper_deck;
     Card_Deck m_read_stacker_deck;
     Card_Deck m_punch_hopper_deck;
@@ -76,7 +77,8 @@ private:
     Card_Ptr_Deck m_fed_punch_cards;
     bool m_read_running = false;
     bool m_punch_running = false;
-    bool m_pending_advance = false;
+    bool m_pending_read_advance = false;
+    bool m_pending_punch_advance = false;
     bool m_end_of_file = false;
 
     std::weak_ptr<Source_Client> m_source_client;

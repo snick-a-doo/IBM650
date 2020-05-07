@@ -69,11 +69,9 @@ void advance(Card_Deck& hopper, Card_Ptr_Deck& fed, Card_Deck& stacker)
 }
 
 Input_Output_Unit::Input_Output_Unit()
+    : m_fed_read_cards(read_feed_size),
+      m_fed_punch_cards(punch_feed_size)
 {
-    while (m_fed_read_cards.size() < read_feed_size)
-        m_fed_read_cards.push_back(nullptr);
-    while (m_fed_punch_cards.size() < punch_feed_size)
-        m_fed_punch_cards.push_back(nullptr);
 }
 
 bool Input_Output_Unit::is_read_idle() const
@@ -105,7 +103,7 @@ void Input_Output_Unit::read_start()
 {
     m_read_running = true;
 
-    std::size_t n_cards = m_pending_advance ? 1
+    std::size_t n_cards = m_pending_read_advance ? 1
         : !m_read_hopper_deck.empty()
         && std::all_of(m_fed_read_cards.begin(), m_fed_read_cards.end(),
                        [](auto p) { return p; })
@@ -127,12 +125,19 @@ void Input_Output_Unit::punch_start()
 {
     if (m_punch_hopper_deck.empty())
     {
+        // Run out one card.
         advance(m_punch_hopper_deck, m_fed_punch_cards, m_punch_stacker_deck);
         return;
     }
 
-    while (!m_fed_punch_cards.front() && !m_punch_hopper_deck.empty())
+    while ((!m_fed_punch_cards.front() && !m_punch_hopper_deck.empty())
+           || m_pending_punch_advance)
+    {
+        if (m_pending_punch_advance)
+            punch();
         advance(m_punch_hopper_deck, m_fed_punch_cards, m_punch_stacker_deck);
+        m_pending_punch_advance = false;
+    }
     m_punch_running = !m_punch_hopper_deck.empty();
     if (auto client = m_sink_client.lock())
         if (m_punch_running)
@@ -142,11 +147,13 @@ void Input_Output_Unit::punch_start()
 void Input_Output_Unit::read_stop()
 {
     m_read_running = false;
+    m_punch_running = false;
 }
 
 void Input_Output_Unit::punch_stop()
 {
     m_read_running = false;
+    m_punch_running = false;
 }
 
 void Input_Output_Unit::end_of_file()
@@ -188,7 +195,7 @@ void Input_Output_Unit::advance_read_cards()
     if (m_fed_read_cards.front())
         m_source_buffer = card_to_buffer(*m_fed_read_cards.front());
 
-    m_pending_advance = false;
+    m_pending_read_advance = false;
 }
 
 void Input_Output_Unit::advance_source()
@@ -197,7 +204,7 @@ void Input_Output_Unit::advance_source()
     if (std::all_of(m_fed_read_cards.begin(), m_fed_read_cards.end(), [](auto p) { return !p; }))
         m_end_of_file = false;
 
-    m_pending_advance = true;
+    m_pending_read_advance = true;
     if (!m_read_running || (m_read_hopper_deck.empty() && !m_end_of_file))
         return;
 
@@ -218,16 +225,22 @@ void Input_Output_Unit::connect_sink_client(std::weak_ptr<Sink_Client> client)
 
 void Input_Output_Unit::advance_sink()
 {
+    m_pending_punch_advance = !m_punch_running;
     if (!m_punch_running)
         return;
 
-    *m_fed_punch_cards.front() = buffer_to_card(m_sink_buffer);
-    m_sink_buffer.clear();
+    punch();
     advance(m_punch_hopper_deck, m_fed_punch_cards, m_punch_stacker_deck);
     m_punch_running = !m_punch_hopper_deck.empty();
     if (auto client = m_sink_client.lock())
         if (m_punch_running)
             client->resume_sink_client();
+}
+
+void Input_Output_Unit::punch()
+{
+    *m_fed_punch_cards.front() = buffer_to_card(m_sink_buffer);
+    m_sink_buffer.clear();
 }
 
 Buffer& Input_Output_Unit::get_sink()
